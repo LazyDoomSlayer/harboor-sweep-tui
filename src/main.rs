@@ -2,8 +2,11 @@ use color_eyre::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::layout::{Constraint, Layout, Position};
 use ratatui::prelude::{Color, Style};
-use ratatui::widgets::Block;
+use ratatui::widgets::{Block, List, ListItem};
 use ratatui::{widgets::Paragraph, DefaultTerminal, Frame};
+
+use ratatui::text::{Line, Span};
+
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
     let terminal = ratatui::init();
@@ -20,6 +23,7 @@ pub struct App {
     port_process_user_input: String,
     port_process_user_input_character_index: usize,
     is_searching: bool,
+    processes: Vec<String>,
 }
 #[derive(Debug, Default)]
 enum InputMode {
@@ -40,6 +44,7 @@ impl App {
             port_process_user_input: String::new(),
             port_process_user_input_character_index: 0,
             input_mode: InputMode::Normal,
+            processes: Vec::new(),
             is_searching: false,
         }
     }
@@ -109,37 +114,49 @@ impl App {
     /// - <https://docs.rs/ratatui/latest/ratatui/widgets/index.html>
     /// - <https://github.com/ratatui/ratatui/tree/main/ratatui-widgets/examples>
     fn render(&mut self, frame: &mut Frame) {
-        if self.is_searching {
-            let vertical = Layout::vertical([Constraint::Length(3)]);
-            let [input_area] = vertical.areas(frame.area());
+        // if self.is_searching {
+        //
+        // }
 
-            let input = Paragraph::new(self.port_process_user_input.as_str())
-                .style(match self.input_mode {
-                    InputMode::Normal => Style::default(),
-                    InputMode::Editing => Style::default().fg(Color::Yellow),
-                })
-                .block(Block::bordered().title(" Search "));
+        let vertical = Layout::vertical([Constraint::Length(3), Constraint::Min(1)]);
+        let [input_area, table_area] = vertical.areas(frame.area());
 
-            frame.render_widget(input, input_area);
+        let input = Paragraph::new(self.port_process_user_input.as_str())
+            .style(match self.input_mode {
+                InputMode::Normal => Style::default(),
+                InputMode::Editing => Style::default().fg(Color::Yellow),
+            })
+            .block(Block::bordered().title(" Search "));
 
-            match self.input_mode {
-                // Hide the cursor. `Frame` does this by default, so we don't need to do anything here
-                InputMode::Normal => {}
+        frame.render_widget(input, input_area);
 
-                // Make the cursor visible and ask ratatui to put it at the specified coordinates after
-                // rendering
-                #[allow(clippy::cast_possible_truncation)]
-                InputMode::Editing => frame.set_cursor_position(Position::new(
-                    // Draw the cursor at the current position in the input field.
-                    // This position is can be controlled via the left and right arrow key
-                    input_area.x + self.port_process_user_input_character_index as u16 + 1,
-                    // Move one line down, from the border to the input line
-                    input_area.y + 1,
-                )),
-            }
+        match self.input_mode {
+            // Hide the cursor. `Frame` does this by default, so we don't need to do anything here
+            InputMode::Normal => {}
+
+            // Make the cursor visible and ask ratatui to put it at the specified coordinates after
+            // rendering
+            #[allow(clippy::cast_possible_truncation)]
+            InputMode::Editing => frame.set_cursor_position(Position::new(
+                // Draw the cursor at the current position in the input field.
+                // This position is can be controlled via the left and right arrow key
+                input_area.x + self.port_process_user_input_character_index as u16 + 1,
+                // Move one line down, from the border to the input line
+                input_area.y + 1,
+            )),
         }
-        // let text = "Hello, Harboor Sweep TUI!";
-        // frame.render_widget(Paragraph::new(text).centered(), frame.area())
+        let processes_listed: Vec<ListItem> = self
+            .processes
+            .iter()
+            .enumerate()
+            .map(|(i, m)| {
+                let content = Line::from(Span::raw(format!("{i}: {m}")));
+                ListItem::new(content)
+            })
+            .collect();
+
+        let processes = List::new(processes_listed).block(Block::bordered().title("Processes"));
+        frame.render_widget(processes, table_area);
     }
 
     fn clamp_cursor(&self, new_cursor_pos: usize) -> usize {
