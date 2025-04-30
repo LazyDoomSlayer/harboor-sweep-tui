@@ -1,9 +1,9 @@
 use color_eyre::Result;
-use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::layout::{Constraint, Layout, Position};
 use ratatui::prelude::{Color, Style};
 use ratatui::widgets::Block;
-use ratatui::{DefaultTerminal, Frame, widgets::Paragraph};
+use ratatui::{widgets::Paragraph, DefaultTerminal, Frame};
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
     let terminal = ratatui::init();
@@ -27,6 +27,12 @@ enum InputMode {
     Normal,
     Editing,
 }
+
+enum AppControlFlow {
+    Continue,
+    Exit,
+}
+
 impl App {
     /// Construct a new instance of [`App`].
     pub fn new() -> Self {
@@ -39,46 +45,60 @@ impl App {
     }
 
     /// Run the application's main loop.
-    pub fn run(mut self, mut terminal: DefaultTerminal) -> Result<()> {
+    fn run(mut self, mut terminal: DefaultTerminal) -> Result<()> {
         loop {
             terminal.draw(|frame| self.render(frame))?;
 
             match event::read()? {
-                Event::Key(key) => match self.input_mode {
-                    InputMode::Normal => match (key.modifiers, key.code) {
-                        (_, KeyCode::Char('e')) => {
-                            self.input_mode = InputMode::Editing;
-                        }
-                        (KeyModifiers::NONE, KeyCode::Char('q' | 'Q'))
-                        | (KeyModifiers::NONE, KeyCode::Esc)
-                        | (KeyModifiers::CONTROL, KeyCode::Char('c' | 'C')) => {
-                            return Ok(());
-                        }
-                        (KeyModifiers::CONTROL, KeyCode::Char('f') | KeyCode::Char('F')) => {
-                            if key.kind != KeyEventKind::Press {
-                                continue;
-                            }
-                            self.is_searching = !self.is_searching;
-                            if (self.is_searching) {
-                                self.input_mode = InputMode::Editing;
-                            }
-                        }
-                        _ => {}
-                    },
-                    InputMode::Editing if key.kind == KeyEventKind::Press => match key.code {
-                        KeyCode::Char(to_insert) => self.enter_char(to_insert),
-                        KeyCode::Backspace => self.delete_char(),
-                        KeyCode::Left => self.move_cursor_left(),
-                        KeyCode::Right => self.move_cursor_right(),
-                        KeyCode::Esc => self.input_mode = InputMode::Normal,
-                        _ => {}
-                    },
-                    InputMode::Editing => {}
-                },
-                Event::Mouse(_) => {}
-                Event::Resize(_, _) => {}
+                Event::Key(key) if key.kind == KeyEventKind::Press => {
+                    if matches!(self.handle_key_event(key)?, AppControlFlow::Exit) {
+                        return Ok(());
+                    }
+                }
                 _ => {}
             }
+        }
+    }
+
+    fn handle_key_event(&mut self, key: KeyEvent) -> Result<AppControlFlow> {
+        match self.input_mode {
+            InputMode::Normal => self.handle_normal_mode_key(key),
+            InputMode::Editing => {
+                self.handle_editing_mode_key(key);
+                Ok(AppControlFlow::Continue)
+            }
+        }
+    }
+
+    fn handle_normal_mode_key(&mut self, key: KeyEvent) -> Result<AppControlFlow> {
+        match (key.modifiers, key.code) {
+            (_, KeyCode::Char('e')) => {
+                self.input_mode = InputMode::Editing;
+            }
+            (KeyModifiers::NONE, KeyCode::Char('q' | 'Q'))
+            | (KeyModifiers::NONE, KeyCode::Esc)
+            | (KeyModifiers::CONTROL, KeyCode::Char('c' | 'C')) => {
+                return Ok(AppControlFlow::Exit);
+            }
+            (KeyModifiers::CONTROL, KeyCode::Char('f' | 'F')) => {
+                self.is_searching = !self.is_searching;
+                if self.is_searching {
+                    self.input_mode = InputMode::Editing;
+                }
+            }
+            _ => {}
+        }
+        Ok(AppControlFlow::Continue)
+    }
+
+    fn handle_editing_mode_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Char(to_insert) => self.enter_char(to_insert),
+            KeyCode::Backspace => self.delete_char(),
+            KeyCode::Left => self.move_cursor_left(),
+            KeyCode::Right => self.move_cursor_right(),
+            KeyCode::Esc => self.input_mode = InputMode::Normal,
+            _ => {}
         }
     }
 
