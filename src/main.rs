@@ -1,10 +1,9 @@
 use color_eyre::Result;
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::layout::{Constraint, Layout, Position};
 use ratatui::prelude::{Color, Style};
 use ratatui::widgets::Block;
-use ratatui::{widgets::Paragraph, DefaultTerminal, Frame};
-
+use ratatui::{DefaultTerminal, Frame, widgets::Paragraph};
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
     let terminal = ratatui::init();
@@ -17,7 +16,6 @@ fn main() -> color_eyre::Result<()> {
 #[derive(Debug, Default)]
 pub struct App {
     /// Is the application running?
-    running: bool,
     input_mode: InputMode,
     port_process_user_input: String,
     port_process_user_input_character_index: usize,
@@ -33,7 +31,6 @@ impl App {
     /// Construct a new instance of [`App`].
     pub fn new() -> Self {
         Self {
-            running: false,
             port_process_user_input: String::new(),
             port_process_user_input_character_index: 0,
             input_mode: InputMode::Normal,
@@ -43,24 +40,28 @@ impl App {
 
     /// Run the application's main loop.
     pub fn run(mut self, mut terminal: DefaultTerminal) -> Result<()> {
-        // self.running = true;
-        // while self.running {
-        //     terminal.draw(|frame| self.render(frame))?;
-
-        // }
-        // Ok(())
         loop {
             terminal.draw(|frame| self.render(frame))?;
-            self.handle_crossterm_events()?;
 
-            if let Event::Key(key) = event::read()? {
-                match self.input_mode {
-                    InputMode::Normal => match key.code {
-                        KeyCode::Char('e') => {
+            match event::read()? {
+                Event::Key(key) => match self.input_mode {
+                    InputMode::Normal => match (key.modifiers, key.code) {
+                        (_, KeyCode::Char('e')) => {
                             self.input_mode = InputMode::Editing;
                         }
-                        KeyCode::Char('q') => {
+                        (KeyModifiers::NONE, KeyCode::Char('q' | 'Q'))
+                        | (KeyModifiers::NONE, KeyCode::Esc)
+                        | (KeyModifiers::CONTROL, KeyCode::Char('c' | 'C')) => {
                             return Ok(());
+                        }
+                        (KeyModifiers::CONTROL, KeyCode::Char('f') | KeyCode::Char('F')) => {
+                            if key.kind != KeyEventKind::Press {
+                                continue;
+                            }
+                            self.is_searching = !self.is_searching;
+                            if (self.is_searching) {
+                                self.input_mode = InputMode::Editing;
+                            }
                         }
                         _ => {}
                     },
@@ -73,7 +74,10 @@ impl App {
                         _ => {}
                     },
                     InputMode::Editing => {}
-                }
+                },
+                Event::Mouse(_) => {}
+                Event::Resize(_, _) => {}
+                _ => {}
             }
         }
     }
@@ -114,42 +118,8 @@ impl App {
                 )),
             }
         }
-
         // let text = "Hello, Harboor Sweep TUI!";
         // frame.render_widget(Paragraph::new(text).centered(), frame.area())
-    }
-
-    /// Reads the crossterm events and updates the state of [`App`].
-    ///
-    /// If your application needs to perform work in between handling events, you can use the
-    /// [`event::poll`] function to check if there are any events available with a timeout.
-    fn handle_crossterm_events(&mut self) -> Result<()> {
-        match event::read()? {
-            // it's important to check KeyEventKind::Press to avoid handling key release events
-            Event::Key(key) if key.kind == KeyEventKind::Press => self.on_key_event(key),
-            Event::Mouse(_) => {}
-            Event::Resize(_, _) => {}
-            _ => {}
-        }
-        Ok(())
-    }
-
-    /// Handles the key events and updates the state of [`App`].
-    fn on_key_event(&mut self, key: KeyEvent) {
-        match (key.modifiers, key.code) {
-            (_, KeyCode::Esc | KeyCode::Char('q'))
-            | (KeyModifiers::CONTROL, KeyCode::Char('c') | KeyCode::Char('C')) => self.quit(),
-
-            (_, KeyCode::Char('f')) => {
-                self.is_searching = !self.is_searching;
-            }
-            _ => {}
-        }
-    }
-
-    /// Set running to false to quit the application.
-    fn quit(&mut self) {
-        self.running = false;
     }
 
     fn clamp_cursor(&self, new_cursor_pos: usize) -> usize {
