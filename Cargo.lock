@@ -1490,6 +1490,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tauri-plugin-opener",
+ "unicode-width 0.2.0",
  "windows 0.59.0",
 ]
 
