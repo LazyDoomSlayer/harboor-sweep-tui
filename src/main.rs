@@ -1,11 +1,71 @@
-use color_eyre::Result;
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
-use ratatui::layout::{Constraint, Layout, Position};
-use ratatui::prelude::{Color, Style};
-use ratatui::widgets::{Block, List, ListItem};
-use ratatui::{widgets::Paragraph, DefaultTerminal, Frame};
+mod common;
+use crate::common::{KillProcessResponse, PortInfo, ProcessInfo, ProcessInfoResponse};
+#[cfg(target_family = "unix")]
+pub mod unix;
 
-use ratatui::text::{Line, Span};
+#[cfg(target_family = "windows")]
+pub mod windows;
+use color_eyre::Result;
+
+use ratatui::{
+    DefaultTerminal, Frame,
+    crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
+    layout::{Constraint, Layout, Margin, Position, Rect},
+    prelude::{Color, Style},
+    style::{self, Modifier, Stylize, palette::tailwind},
+    text::{Line, Span, Text},
+    widgets::{
+        Block, BorderType, Cell, HighlightSpacing, List, ListItem, Paragraph, Row, Scrollbar,
+        ScrollbarOrientation, ScrollbarState, Table, TableState,
+    },
+};
+
+use std::sync::{Arc, Mutex};
+use unicode_width::UnicodeWidthStr;
+
+const PALETTES: [tailwind::Palette; 5] = [
+    tailwind::GRAY,
+    tailwind::BLUE,
+    tailwind::EMERALD,
+    tailwind::INDIGO,
+    tailwind::RED,
+];
+const INFO_TEXT: [&str; 1] =
+    ["(Esc) quit | (↑) move up | (↓) move down | (←) move left | (→) move right"];
+// "(Shift + →) next color | (Shift + ←) previous color",
+
+const ITEM_HEIGHT: u16 = 1;
+
+#[derive(Debug, Default)]
+struct TableColors {
+    buffer_bg: Color,
+    header_bg: Color,
+    header_fg: Color,
+    row_fg: Color,
+    selected_row_style_fg: Color,
+    selected_column_style_fg: Color,
+    selected_cell_style_fg: Color,
+    normal_row_color: Color,
+    alt_row_color: Color,
+    footer_border_color: Color,
+}
+
+impl TableColors {
+    const fn new(color: &tailwind::Palette) -> Self {
+        Self {
+            buffer_bg: tailwind::SLATE.c950,
+            header_bg: color.c900,
+            header_fg: tailwind::SLATE.c200,
+            row_fg: tailwind::SLATE.c200,
+            selected_row_style_fg: color.c400,
+            selected_column_style_fg: color.c400,
+            selected_cell_style_fg: color.c600,
+            normal_row_color: tailwind::SLATE.c950,
+            alt_row_color: tailwind::SLATE.c900,
+            footer_border_color: color.c400,
+        }
+    }
+}
 
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
@@ -23,8 +83,48 @@ pub struct App {
     port_process_user_input: String,
     port_process_user_input_character_index: usize,
     is_searching: bool,
-    processes: Vec<String>,
+
+    // processes
+    processes: Vec<PortInfo>,
+    interval: Arc<Mutex<u64>>,
+    is_monitoring: Arc<Mutex<bool>>,
+
+    // Table list
+    state: TableState,
+    scroll_state: ScrollbarState,
+    longest_item_lens: (u16, u16, u16, u16, u16), // order is (port pid process_name process_path is_listener)
+    colors: TableColors,
+    color_index: usize,
 }
+
+impl PortInfo {
+    pub fn ref_array(&self) -> Vec<String> {
+        vec![
+            self.port.to_string(),
+            self.pid.to_string(),
+            self.process_name.clone(),
+            self.process_path.clone(),
+            self.is_listener.to_string(),
+        ]
+    }
+
+    fn pid(&self) -> &u32 {
+        &self.pid
+    }
+    fn process_name(&self) -> &str {
+        &self.process_name
+    }
+    fn process_path(&self) -> &str {
+        &self.process_path
+    }
+    fn port(&self) -> &u16 {
+        &self.port
+    }
+    fn is_listener(&self) -> &bool {
+        &self.is_listener
+    }
+}
+
 #[derive(Debug, Default)]
 enum InputMode {
     #[default]
@@ -44,13 +144,75 @@ impl App {
             port_process_user_input: String::new(),
             port_process_user_input_character_index: 0,
             input_mode: InputMode::Normal,
-            processes: Vec::new(),
             is_searching: false,
+            // Processes
+            processes: Vec::new(),
+            interval: Arc::new(Mutex::new(5)),
+            is_monitoring: Arc::new(Mutex::new(false)),
+            // Table list
+            state: TableState::default(),
+            scroll_state: ScrollbarState::new((1 * ITEM_HEIGHT) as usize),
+            longest_item_lens: (5, 5, 30, 55, 5),
+            colors: TableColors::new(&PALETTES[0]),
+            color_index: 0,
         }
+    }
+
+    /// Table list
+    pub fn next_row(&mut self) {
+        let i = match self.state.selected() {
+            Some(i) => {
+                if i >= self.processes.len() - 1 {
+                    0
+                } else {
+                    i + 1
+                }
+            }
+            None => 0,
+        };
+        self.state.select(Some(i));
+        self.scroll_state = self.scroll_state.position(i * ITEM_HEIGHT as usize);
+    }
+
+    pub fn previous_row(&mut self) {
+        let i = match self.state.selected() {
+            Some(i) => {
+                if i == 0 {
+                    self.processes.len() - 1
+                } else {
+                    i - 1
+                }
+            }
+            None => 0,
+        };
+        self.state.select(Some(i));
+        self.scroll_state = self.scroll_state.position(i * ITEM_HEIGHT as usize);
+    }
+
+    pub fn next_column(&mut self) {
+        self.state.select_next_column();
+    }
+
+    pub fn previous_column(&mut self) {
+        self.state.select_previous_column();
+    }
+
+    pub fn next_color(&mut self) {
+        self.color_index = (self.color_index + 1) % PALETTES.len();
+    }
+
+    pub fn previous_color(&mut self) {
+        let count = PALETTES.len();
+        self.color_index = (self.color_index + count - 1) % count;
+    }
+    pub fn set_colors(&mut self) {
+        self.colors = TableColors::new(&PALETTES[self.color_index]);
     }
 
     /// Run the application's main loop.
     fn run(mut self, mut terminal: DefaultTerminal) -> Result<()> {
+        self.start_monitoring().expect("TODO: panic message");
+
         loop {
             terminal.draw(|frame| self.render(frame))?;
 
@@ -76,6 +238,8 @@ impl App {
     }
 
     fn handle_normal_mode_key(&mut self, key: KeyEvent) -> Result<AppControlFlow> {
+        let shift_pressed = key.modifiers.contains(KeyModifiers::SHIFT);
+
         match (key.modifiers, key.code) {
             (_, KeyCode::Char('e')) => {
                 self.input_mode = InputMode::Editing;
@@ -87,10 +251,21 @@ impl App {
             }
             (KeyModifiers::CONTROL, KeyCode::Char('f' | 'F')) => {
                 self.is_searching = !self.is_searching;
+
                 if self.is_searching {
                     self.input_mode = InputMode::Editing;
+                } else {
+                    self.port_process_user_input = String::new();
                 }
             }
+            (_, KeyCode::Char('j') | KeyCode::Down) => self.next_row(),
+            (_, KeyCode::Char('k') | KeyCode::Up) => self.previous_row(),
+            (_, KeyCode::Char('l') | KeyCode::Right) if shift_pressed => self.next_color(),
+            (_, KeyCode::Char('h') | KeyCode::Left) if shift_pressed => {
+                self.previous_color();
+            }
+            // (_, KeyCode::Char('l') | KeyCode::Right) => self.next_column(),
+            // (_, KeyCode::Char('h') | KeyCode::Left) => self.previous_column(),
             _ => {}
         }
         Ok(AppControlFlow::Continue)
@@ -102,7 +277,18 @@ impl App {
             KeyCode::Backspace => self.delete_char(),
             KeyCode::Left => self.move_cursor_left(),
             KeyCode::Right => self.move_cursor_right(),
-            KeyCode::Esc => self.input_mode = InputMode::Normal,
+            KeyCode::Down => {
+                self.input_mode = InputMode::Normal;
+                self.next_row()
+            }
+            KeyCode::Up => {
+                self.input_mode = InputMode::Normal;
+                self.previous_row()
+            }
+            KeyCode::Esc => {
+                self.input_mode = InputMode::Normal;
+                self.is_searching = !self.is_searching;
+            }
             _ => {}
         }
     }
@@ -114,21 +300,50 @@ impl App {
     /// - <https://docs.rs/ratatui/latest/ratatui/widgets/index.html>
     /// - <https://github.com/ratatui/ratatui/tree/main/ratatui-widgets/examples>
     fn render(&mut self, frame: &mut Frame) {
-        // if self.is_searching {
-        //
-        // }
+        self.set_colors();
 
-        let vertical = Layout::vertical([Constraint::Length(3), Constraint::Min(1)]);
-        let [input_area, table_area] = vertical.areas(frame.area());
+        if !self.is_searching {
+            // ——— SEARCHING: no input area ———
+            let [table_area, footer_area] =
+                Layout::vertical([Constraint::Min(1), Constraint::Length(3)]).areas(frame.area());
 
+            self.render_table(frame, table_area);
+            self.render_scrollbar(frame, table_area);
+            self.render_footer(frame, footer_area);
+        } else {
+            // ——— NOT SEARCHING: show input + table + footer ———
+            let [input_area, table_area, footer_area] = Layout::vertical([
+                Constraint::Length(3),
+                Constraint::Min(1),
+                Constraint::Length(3),
+            ])
+            .areas(frame.area());
+
+            self.render_search(frame, input_area);
+            self.render_table(frame, table_area);
+            self.render_scrollbar(frame, table_area);
+            self.render_footer(frame, footer_area);
+        }
+    }
+
+    fn render_search(&mut self, frame: &mut Frame, area: Rect) {
         let input = Paragraph::new(self.port_process_user_input.as_str())
             .style(match self.input_mode {
-                InputMode::Normal => Style::default(),
-                InputMode::Editing => Style::default().fg(Color::Yellow),
+                InputMode::Normal => Style::new()
+                    .fg(self.colors.row_fg)
+                    .bg(self.colors.buffer_bg),
+                InputMode::Editing => Style::default()
+                    .fg(self.colors.row_fg)
+                    .bg(self.colors.buffer_bg),
             })
-            .block(Block::bordered().title(" Search "));
+            .block(
+                Block::bordered()
+                    .border_type(BorderType::Plain)
+                    .border_style(Style::new().fg(self.colors.footer_border_color))
+                    .title(" Search "),
+            );
 
-        frame.render_widget(input, input_area);
+        frame.render_widget(input, area);
 
         match self.input_mode {
             // Hide the cursor. `Frame` does this by default, so we don't need to do anything here
@@ -140,23 +355,124 @@ impl App {
             InputMode::Editing => frame.set_cursor_position(Position::new(
                 // Draw the cursor at the current position in the input field.
                 // This position is can be controlled via the left and right arrow key
-                input_area.x + self.port_process_user_input_character_index as u16 + 1,
+                area.x + self.port_process_user_input_character_index as u16 + 1,
                 // Move one line down, from the border to the input line
-                input_area.y + 1,
+                area.y + 1,
             )),
         }
+    }
+
+    fn render_table(&mut self, frame: &mut Frame, area: Rect) {
+        let header_style = Style::default()
+            .fg(self.colors.header_fg)
+            .bg(self.colors.header_bg);
+        let selected_row_style = Style::default()
+            .add_modifier(Modifier::REVERSED)
+            .fg(self.colors.selected_row_style_fg);
+        let selected_col_style = Style::default().fg(self.colors.selected_column_style_fg);
+        let selected_cell_style = Style::default()
+            .add_modifier(Modifier::REVERSED)
+            .fg(self.colors.selected_cell_style_fg);
+
+        let header = ["PID", "Port", "Process Name", "Process Path", "Listener"]
+            .into_iter()
+            .map(Cell::from)
+            .collect::<Row>()
+            .style(header_style)
+            .height(1);
+
+        let rows = self.processes.iter().enumerate().map(|(i, data)| {
+            let color = match i % 2 {
+                0 => self.colors.normal_row_color,
+                _ => self.colors.alt_row_color,
+            };
+            let item = data.ref_array();
+            item.into_iter()
+                .map(|content| Cell::from(Text::from(format!("{content}"))))
+                .collect::<Row>()
+                .style(Style::new()) // .fg(self.colors.row_fg).bg(color)
+                .height(ITEM_HEIGHT)
+        });
+
+        let t = Table::new(
+            rows,
+            [
+                Constraint::Length(self.longest_item_lens.0),
+                Constraint::Min(self.longest_item_lens.1),
+                Constraint::Min(self.longest_item_lens.2),
+                Constraint::Min(self.longest_item_lens.3),
+                Constraint::Min(self.longest_item_lens.4),
+            ],
+        )
+        .header(header)
+        .row_highlight_style(selected_row_style)
+        .column_highlight_style(selected_col_style)
+        .cell_highlight_style(selected_cell_style)
+        .bg(self.colors.buffer_bg)
+        .block(
+            Block::bordered()
+                .border_type(BorderType::Plain)
+                .border_style(Style::new().fg(self.colors.footer_border_color)),
+        )
+        .highlight_spacing(HighlightSpacing::Always);
+        frame.render_stateful_widget(t, area, &mut self.state);
+    }
+
+    fn render_scrollbar(&mut self, frame: &mut Frame, area: Rect) {
+        frame.render_stateful_widget(
+            Scrollbar::default()
+                .orientation(ScrollbarOrientation::VerticalRight)
+                .begin_symbol(None)
+                .end_symbol(None),
+            area.inner(Margin {
+                vertical: 1,
+                horizontal: 1,
+            }),
+            &mut self.scroll_state,
+        );
+    }
+    fn render_footer(&self, frame: &mut Frame, area: Rect) {
+        let info_footer = Paragraph::new(Text::from_iter(INFO_TEXT))
+            .style(
+                Style::new()
+                    .fg(self.colors.row_fg)
+                    .bg(self.colors.buffer_bg),
+            )
+            .centered()
+            .block(
+                Block::bordered()
+                    .border_type(BorderType::Plain)
+                    .border_style(Style::new().fg(self.colors.footer_border_color)),
+            );
+        frame.render_widget(info_footer, area);
+    }
+    //
+    fn draw_process_list(&self, frame: &mut Frame, area: Rect) {
+        // Build your ListItem vec
         let processes_listed: Vec<ListItem> = self
             .processes
             .iter()
             .enumerate()
-            .map(|(i, m)| {
-                let content = Line::from(Span::raw(format!("{i}: {m}")));
-                ListItem::new(content)
+            .map(|(i, proc)| {
+                // one Line for the header…
+                // let header: Line = Line::from(vec![
+                // ]);
+
+                // …and one Line for the details
+                let details: Line = Line::from(vec![
+                    Span::raw(format!("{}", proc.pid)),
+                    Span::raw(format!("{}", proc.port)),
+                    Span::raw(format!("{}", proc.process_path)),
+                    Span::raw(format!("{}", proc.is_listener)),
+                ]);
+
+                ListItem::new(vec![details])
             })
             .collect();
 
-        let processes = List::new(processes_listed).block(Block::bordered().title("Processes"));
-        frame.render_widget(processes, table_area);
+        let processes_widget =
+            List::new(processes_listed).block(Block::bordered().title("Processes"));
+        frame.render_widget(processes_widget, area);
     }
 
     fn clamp_cursor(&self, new_cursor_pos: usize) -> usize {
@@ -213,4 +529,156 @@ impl App {
             self.move_cursor_left();
         }
     }
+
+    // Processes
+    pub fn set_interval(&self, interval: u64) {
+        *self.interval.lock().unwrap() = interval;
+    }
+
+    pub fn is_monitoring(&self) -> bool {
+        *self.is_monitoring.lock().unwrap()
+    }
+
+    pub fn set_monitoring(&self, state: bool) {
+        *self.is_monitoring.lock().unwrap() = state;
+    }
+
+    fn start_monitoring(&mut self) -> Result<(), String> {
+        // if self.is_monitoring {
+        //     return Err("Monitoring is already running".into());
+        // }
+
+        self.set_monitoring(true);
+
+        self.monitor_ports_loop();
+        Ok(())
+    }
+
+    fn monitor_ports_loop(&mut self) {
+        match self.fetch_ports_by_os() {
+            Ok(ports) => {
+                // update vtor
+                self.processes = ports;
+                println!("{:?}", self.processes.len());
+                self.scroll_state =
+                    ScrollbarState::new((self.processes.len() * ITEM_HEIGHT as usize));
+                self.longest_item_lens = constraint_len_calculator(&self.processes);
+            }
+            Err(e) => {
+                eprintln!("Error fetching ports: {}", e);
+            }
+        }
+    }
+
+    fn fetch_ports_by_os(&self) -> Result<Vec<PortInfo>, String> {
+        #[cfg(target_family = "unix")]
+        {
+            unix::fetch_ports()
+        }
+        #[cfg(target_family = "windows")]
+        {
+            windows::fetch_ports()
+        }
+    }
+
+    fn stop_monitoring(&self) -> Result<(), String> {
+        if !self.is_monitoring() {
+            return Err("Monitoring is not running".to_string());
+        }
+
+        self.set_monitoring(false);
+        Ok(())
+    }
+
+    fn update_interval(&self, new_interval: u64) -> Result<(), String> {
+        if new_interval < 1 || new_interval > 60 {
+            return Err("Interval must be between 1 and 60 seconds".to_string());
+        }
+
+        self.set_interval(new_interval);
+
+        Ok(())
+    }
+
+    fn fetch_ports() -> Result<Vec<PortInfo>, String> {
+        #[cfg(target_family = "unix")]
+        {
+            unix::fetch_ports()
+        }
+        #[cfg(target_family = "windows")]
+        {
+            windows::fetch_ports()
+        }
+    }
+
+    fn kill_process(pid: u32) -> KillProcessResponse {
+        #[cfg(target_family = "unix")]
+        {
+            unix::kill_process(pid)
+        }
+        #[cfg(target_family = "windows")]
+        {
+            windows::kill_process(pid)
+        }
+    }
+
+    fn get_processes_using_port(port: u16, item_pid: u32) -> Result<ProcessInfoResponse, String> {
+        #[cfg(target_family = "unix")]
+        {
+            unix::get_processes_using_port(port, item_pid)
+        }
+        #[cfg(target_family = "windows")]
+        {
+            return Ok(ProcessInfoResponse {
+                is_listener: false,
+                data: Some(ProcessInfo {
+                    pid: 5678,
+                    port,
+                    process_name: "mocked_process.exe".to_string(),
+                    process_path: item_pid.to_string(),
+                }),
+            });
+        }
+    }
+}
+
+fn constraint_len_calculator(processes: &[PortInfo]) -> (u16, u16, u16, u16, u16) {
+    let pid = processes
+        .iter()
+        .map(|p| p.pid.to_string().width())
+        .max()
+        .unwrap_or(0);
+
+    let port = processes
+        .iter()
+        .map(|p| p.port.to_string().width())
+        .max()
+        .unwrap_or(0);
+
+    let process_name = processes
+        .iter()
+        .map(|p| p.process_name.width())
+        .max()
+        .unwrap_or(0);
+
+    let process_path = processes
+        .iter()
+        .map(|p| p.process_path.width())
+        .max()
+        .unwrap_or(0);
+
+    let is_listener = processes
+        .iter()
+        .map(|p| p.is_listener.to_string().width())
+        .max()
+        .unwrap_or(0);
+
+    // truncate into u16 (should be safe for typical terminal widths)
+    (
+        pid as u16,
+        port as u16,
+        process_name as u16,
+        process_path as u16,
+        is_listener as u16,
+    )
 }
