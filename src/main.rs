@@ -561,7 +561,7 @@ impl App {
                 self.processes = ports;
                 println!("{:?}", self.processes.len());
                 self.scroll_state =
-                    ScrollbarState::new((self.processes.len() * ITEM_HEIGHT as usize));
+                    ScrollbarState::new(self.processes.len() * ITEM_HEIGHT as usize);
                 self.longest_item_lens = constraint_len_calculator(&self.processes);
             }
             Err(e) => {
