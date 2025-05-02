@@ -1,11 +1,23 @@
+mod common;
+use crate::common::{KillProcessResponse, PortInfo, ProcessInfo, ProcessInfoResponse};
+
+#[cfg(target_family = "unix")]
+pub mod unix;
+
+#[cfg(target_family = "windows")]
+pub mod windows;
 use color_eyre::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
-use ratatui::layout::{Constraint, Layout, Position};
-use ratatui::prelude::{Color, Style};
-use ratatui::widgets::{Block, List, ListItem};
-use ratatui::{widgets::Paragraph, DefaultTerminal, Frame};
+use ratatui::{
+    DefaultTerminal, Frame,
+    layout::{Constraint, Layout, Position},
+    prelude::{Color, Style},
+    text::{Line, Span},
+    widgets::{Block, List, ListItem, Paragraph},
+};
 
-use ratatui::text::{Line, Span};
+use ratatui::layout::Rect;
+use std::sync::{Arc, Mutex};
 
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
@@ -23,7 +35,11 @@ pub struct App {
     port_process_user_input: String,
     port_process_user_input_character_index: usize,
     is_searching: bool,
-    processes: Vec<String>,
+
+    // processes
+    processes: Vec<PortInfo>,
+    interval: Arc<Mutex<u64>>,
+    is_monitoring: Arc<Mutex<bool>>,
 }
 #[derive(Debug, Default)]
 enum InputMode {
@@ -44,8 +60,11 @@ impl App {
             port_process_user_input: String::new(),
             port_process_user_input_character_index: 0,
             input_mode: InputMode::Normal,
-            processes: Vec::new(),
             is_searching: false,
+            // Processes
+            processes: Vec::new(),
+            interval: Arc::new(Mutex::new(5)),
+            is_monitoring: Arc::new(Mutex::new(false)),
         }
     }
 
@@ -53,6 +72,7 @@ impl App {
     fn run(mut self, mut terminal: DefaultTerminal) -> Result<()> {
         loop {
             terminal.draw(|frame| self.render(frame))?;
+            self.start_monitoring().expect("TODO: panic message");
 
             match event::read()? {
                 Event::Key(key) if key.kind == KeyEventKind::Press => {
@@ -145,18 +165,36 @@ impl App {
                 input_area.y + 1,
             )),
         }
+
+        self.draw_process_list(frame, table_area);
+    }
+
+    fn draw_process_list(&self, frame: &mut Frame, area: Rect) {
+        // Build your ListItem vec
         let processes_listed: Vec<ListItem> = self
             .processes
             .iter()
             .enumerate()
-            .map(|(i, m)| {
-                let content = Line::from(Span::raw(format!("{i}: {m}")));
-                ListItem::new(content)
+            .map(|(i, proc)| {
+                // one Line for the header…
+                // let header: Line = Line::from(vec![
+                // ]);
+
+                // …and one Line for the details
+                let details: Line = Line::from(vec![
+                    Span::raw(format!("{}", proc.pid)),
+                    Span::raw(format!("{}", proc.port)),
+                    Span::raw(format!("{}", proc.process_path)),
+                    Span::raw(format!("{}", proc.is_listener)),
+                ]);
+
+                ListItem::new(vec![details])
             })
             .collect();
 
-        let processes = List::new(processes_listed).block(Block::bordered().title("Processes"));
-        frame.render_widget(processes, table_area);
+        let processes_widget =
+            List::new(processes_listed).block(Block::bordered().title("Processes"));
+        frame.render_widget(processes_widget, area);
     }
 
     fn clamp_cursor(&self, new_cursor_pos: usize) -> usize {
@@ -211,6 +249,114 @@ impl App {
             self.port_process_user_input =
                 before_char_to_delete.chain(after_char_to_delete).collect();
             self.move_cursor_left();
+        }
+    }
+
+    // Processes
+    pub fn set_interval(&self, interval: u64) {
+        *self.interval.lock().unwrap() = interval;
+    }
+
+    pub fn is_monitoring(&self) -> bool {
+        *self.is_monitoring.lock().unwrap()
+    }
+
+    pub fn set_monitoring(&self, state: bool) {
+        *self.is_monitoring.lock().unwrap() = state;
+    }
+
+    fn start_monitoring(&mut self) -> Result<(), String> {
+        // if self.is_monitoring {
+        //     return Err("Monitoring is already running".into());
+        // }
+
+        self.set_monitoring(true);
+
+        self.monitor_ports_loop();
+
+        Ok(())
+    }
+
+    fn monitor_ports_loop(&mut self) {
+        match self.fetch_ports_by_os() {
+            Ok(ports) => {
+                // update vtor
+                self.processes = ports
+            }
+            Err(e) => {
+                eprintln!("Error fetching ports: {}", e);
+            }
+        }
+    }
+
+    fn fetch_ports_by_os(&self) -> Result<Vec<PortInfo>, String> {
+        #[cfg(target_family = "unix")]
+        {
+            unix::fetch_ports()
+        }
+        #[cfg(target_family = "windows")]
+        {
+            windows::fetch_ports()
+        }
+    }
+
+    fn stop_monitoring(&self) -> Result<(), String> {
+        if !self.is_monitoring() {
+            return Err("Monitoring is not running".to_string());
+        }
+
+        self.set_monitoring(false);
+        Ok(())
+    }
+
+    fn update_interval(&self, new_interval: u64) -> Result<(), String> {
+        if new_interval < 1 || new_interval > 60 {
+            return Err("Interval must be between 1 and 60 seconds".to_string());
+        }
+
+        self.set_interval(new_interval);
+
+        Ok(())
+    }
+
+    fn fetch_ports() -> Result<Vec<PortInfo>, String> {
+        #[cfg(target_family = "unix")]
+        {
+            unix::fetch_ports()
+        }
+        #[cfg(target_family = "windows")]
+        {
+            windows::fetch_ports()
+        }
+    }
+
+    fn kill_process(pid: u32) -> KillProcessResponse {
+        #[cfg(target_family = "unix")]
+        {
+            unix::kill_process(pid)
+        }
+        #[cfg(target_family = "windows")]
+        {
+            windows::kill_process(pid)
+        }
+    }
+
+    fn get_processes_using_port(port: u16, item_pid: u32) -> Result<ProcessInfoResponse, String> {
+        #[cfg(target_family = "unix")]
+        {
+            unix::get_processes_using_port(port, item_pid)
+        }
+        #[cfg(target_family = "windows")]
+        {
+            return Ok(ProcessInfoResponse {
+                is_listener: false,
+                data: Some(ProcessInfo {
+                    pid: 5678,
+                    port,
+                    process_name: "mocked_process.exe".to_string(),
+                    process_path: item_pid.to_string(),
+                }),
+            });
         }
     }
 }
