@@ -34,7 +34,7 @@ const INFO_TEXT: [&str; 1] =
     ["(Esc) quit | (↑) move up | (↓) move down | (←) move left | (→) move right"];
 // "(Shift + →) next color | (Shift + ←) previous color",
 
-const ITEM_HEIGHT: u16 = 2;
+const ITEM_HEIGHT: u16 = 1;
 
 #[derive(Debug, Default)]
 struct TableColors {
@@ -251,8 +251,11 @@ impl App {
             }
             (KeyModifiers::CONTROL, KeyCode::Char('f' | 'F')) => {
                 self.is_searching = !self.is_searching;
+
                 if self.is_searching {
                     self.input_mode = InputMode::Editing;
+                } else {
+                    self.port_process_user_input = String::new();
                 }
             }
             (_, KeyCode::Char('j') | KeyCode::Down) => self.next_row(),
@@ -274,7 +277,18 @@ impl App {
             KeyCode::Backspace => self.delete_char(),
             KeyCode::Left => self.move_cursor_left(),
             KeyCode::Right => self.move_cursor_right(),
-            KeyCode::Esc => self.input_mode = InputMode::Normal,
+            KeyCode::Down => {
+                self.input_mode = InputMode::Normal;
+                self.next_row()
+            }
+            KeyCode::Up => {
+                self.input_mode = InputMode::Normal;
+                self.previous_row()
+            }
+            KeyCode::Esc => {
+                self.input_mode = InputMode::Normal;
+                self.is_searching = !self.is_searching;
+            }
             _ => {}
         }
     }
@@ -286,19 +300,41 @@ impl App {
     /// - <https://docs.rs/ratatui/latest/ratatui/widgets/index.html>
     /// - <https://github.com/ratatui/ratatui/tree/main/ratatui-widgets/examples>
     fn render(&mut self, frame: &mut Frame) {
-        let vertical = Layout::vertical([
-            Constraint::Length(3),
-            Constraint::Min(1),
-            Constraint::Length(3),
-        ]);
-        let [input_area, table_area, table_footer] = vertical.areas(frame.area());
+        self.set_colors();
 
+        if !self.is_searching {
+            // ——— SEARCHING: no input area ———
+            let [table_area, footer_area] =
+                Layout::vertical([Constraint::Min(1), Constraint::Length(3)]).areas(frame.area());
+
+            self.render_table(frame, table_area);
+            self.render_scrollbar(frame, table_area);
+            self.render_footer(frame, footer_area);
+        } else {
+            // ——— NOT SEARCHING: show input + table + footer ———
+            let [input_area, table_area, footer_area] = Layout::vertical([
+                Constraint::Length(3),
+                Constraint::Min(1),
+                Constraint::Length(3),
+            ])
+            .areas(frame.area());
+
+            self.render_search(frame, input_area);
+            self.render_table(frame, table_area);
+            self.render_scrollbar(frame, table_area);
+            self.render_footer(frame, footer_area);
+        }
+    }
+
+    fn render_search(&mut self, frame: &mut Frame, area: Rect) {
         let input = Paragraph::new(self.port_process_user_input.as_str())
             .style(match self.input_mode {
                 InputMode::Normal => Style::new()
                     .fg(self.colors.row_fg)
                     .bg(self.colors.buffer_bg),
-                InputMode::Editing => Style::default().fg(Color::Yellow),
+                InputMode::Editing => Style::default()
+                    .fg(self.colors.row_fg)
+                    .bg(self.colors.buffer_bg),
             })
             .block(
                 Block::bordered()
@@ -307,7 +343,7 @@ impl App {
                     .title(" Search "),
             );
 
-        frame.render_widget(input, input_area);
+        frame.render_widget(input, area);
 
         match self.input_mode {
             // Hide the cursor. `Frame` does this by default, so we don't need to do anything here
@@ -319,18 +355,13 @@ impl App {
             InputMode::Editing => frame.set_cursor_position(Position::new(
                 // Draw the cursor at the current position in the input field.
                 // This position is can be controlled via the left and right arrow key
-                input_area.x + self.port_process_user_input_character_index as u16 + 1,
+                area.x + self.port_process_user_input_character_index as u16 + 1,
                 // Move one line down, from the border to the input line
-                input_area.y + 1,
+                area.y + 1,
             )),
         }
-
-        self.set_colors();
-
-        self.render_table(frame, table_area);
-        self.render_scrollbar(frame, table_area);
-        self.render_footer(frame, table_footer);
     }
+
     fn render_table(&mut self, frame: &mut Frame, area: Rect) {
         let header_style = Style::default()
             .fg(self.colors.header_fg)
@@ -357,7 +388,7 @@ impl App {
             };
             let item = data.ref_array();
             item.into_iter()
-                .map(|content| Cell::from(Text::from(format!("\n{content}\n"))))
+                .map(|content| Cell::from(Text::from(format!("{content}"))))
                 .collect::<Row>()
                 .style(Style::new()) // .fg(self.colors.row_fg).bg(color)
                 .height(ITEM_HEIGHT)
@@ -520,7 +551,6 @@ impl App {
         self.set_monitoring(true);
 
         self.monitor_ports_loop();
-
         Ok(())
     }
 
@@ -532,6 +562,7 @@ impl App {
                 println!("{:?}", self.processes.len());
                 self.scroll_state =
                     ScrollbarState::new((self.processes.len() * ITEM_HEIGHT as usize));
+                self.longest_item_lens = constraint_len_calculator(&self.processes);
             }
             Err(e) => {
                 eprintln!("Error fetching ports: {}", e);
