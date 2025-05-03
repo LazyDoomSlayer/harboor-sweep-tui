@@ -531,7 +531,7 @@ impl App {
     fn handle_key_event(&mut self, key: KeyEvent) -> Result<AppControlFlow> {
         match self.application_mode {
             ApplicationMode::Normal => self.handle_normal_mode_key(key),
-            ApplicationMode::Normal =>  {
+            ApplicationMode::Normal => {
                 self.handle_editing_mode_key(key);
                 Ok(AppControlFlow::Continue)
             }
