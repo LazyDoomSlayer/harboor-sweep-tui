@@ -1,7 +1,5 @@
 mod common;
-use crate::common::{
-    KillProcessResponse, PortInfo, ProcessInfo, ProcessInfoResponse, ProcessPortState,
-};
+use crate::common::{KillProcessResponse, PortInfo};
 #[cfg(target_family = "unix")]
 pub mod unix;
 
@@ -10,16 +8,16 @@ pub mod windows;
 
 use color_eyre::Result;
 use ratatui::{
-    DefaultTerminal, Frame,
-    crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
-    layout::{Constraint, Flex, Layout, Margin, Position, Rect},
+    crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers}, layout::{Constraint, Flex, Layout, Margin, Position, Rect},
     prelude::{Color, Style},
-    style::{self, Modifier, Stylize, palette::tailwind},
+    style::{palette::tailwind, Modifier, Stylize},
     text::{Line, Span, Text},
     widgets::{
-        Block, BorderType, Cell, Clear, HighlightSpacing, List, ListItem, Paragraph, Row,
-        Scrollbar, ScrollbarOrientation, ScrollbarState, Table, TableState,
+        Block, BorderType, Cell, Clear, HighlightSpacing, Paragraph, Row, Scrollbar,
+        ScrollbarOrientation, ScrollbarState, Table, TableState,
     },
+    DefaultTerminal,
+    Frame,
 };
 
 use ratatui::layout::Direction;
@@ -34,8 +32,8 @@ const PALETTES: [tailwind::Palette; 5] = [
     tailwind::INDIGO,
     tailwind::RED,
 ];
-const INFO_TEXT: [&str; 1] =
-    ["(Esc) quit | (↑) move up | (↓) move down | (←) move left | (→) move right"];
+// const INFO_TEXT: [&str; 1] =
+//     ["(Esc) quit | (↑) move up | (↓) move down | (←) move left | (→) move right"];
 
 const ITEM_HEIGHT: u16 = 1;
 
@@ -47,8 +45,8 @@ struct TableColors {
     row_fg: Color,
     selected_row_style_fg: Color,
     selected_cell_style_fg: Color,
-    normal_row_color: Color,
-    alt_row_color: Color,
+    // normal_row_color: Color,
+    // alt_row_color: Color,
     footer_border_color: Color,
 }
 
@@ -61,8 +59,8 @@ impl TableColors {
             row_fg: tailwind::SLATE.c200,
             selected_row_style_fg: color.c400,
             selected_cell_style_fg: color.c600,
-            normal_row_color: tailwind::SLATE.c950,
-            alt_row_color: tailwind::SLATE.c900,
+            // normal_row_color: tailwind::SLATE.c950,
+            // alt_row_color: tailwind::SLATE.c900,
             footer_border_color: color.c400,
         }
     }
@@ -91,7 +89,6 @@ fn main() -> color_eyre::Result<()> {
 struct Keybinding {
     combo: String,
     description: String,
-    divider: Option<String>,
 }
 impl Keybinding {
     pub fn ref_array(&self) -> Vec<String> {
@@ -174,7 +171,7 @@ fn run_background_thread(tx: mpsc::Sender<MultithreadingEvent>) {
         let event = MultithreadingEvent::ProccesesUpdate(Vec::new());
         tx.send(event).unwrap();
 
-        thread::sleep(time::Duration::from_millis(2_000));
+        thread::sleep(time::Duration::from_millis(1_000));
     }
 }
 
@@ -187,22 +184,6 @@ impl PortInfo {
             self.process_path.clone(),
             format!("{:?}", self.port_state),
         ]
-    }
-
-    fn pid(&self) -> &u32 {
-        &self.pid
-    }
-    fn process_name(&self) -> &str {
-        &self.process_name
-    }
-    fn process_path(&self) -> &str {
-        &self.process_path
-    }
-    fn port(&self) -> &u16 {
-        &self.port
-    }
-    fn port_state(&self) -> &ProcessPortState {
-        &self.port_state
     }
 }
 
@@ -259,62 +240,50 @@ impl App {
             Keybinding {
                 combo: "Esc / q / Ctrl+C".into(),
                 description: "Quit the application".into(),
-                divider: None,
             },
             Keybinding {
                 combo: "Ctrl+F".into(),
                 description: "Toggle the search input".into(),
-                divider: None,
             },
             Keybinding {
                 combo: "F1 / ?".into(),
                 description: "Show or hide this help dialog".into(),
-                divider: None,
             },
             Keybinding {
                 combo: "j / ↓".into(),
                 description: "Move selection down".into(),
-                divider: None,
             },
             Keybinding {
                 combo: "k / ↑".into(),
                 description: "Move selection up".into(),
-                divider: None,
             },
             Keybinding {
                 combo: "PageDown".into(),
                 description: "Page down".into(),
-                divider: None,
             },
             Keybinding {
                 combo: "PageUp".into(),
                 description: "Page up".into(),
-                divider: None,
             },
             Keybinding {
                 combo: "Shift+PageDown".into(),
                 description: "Jump to last item".into(),
-                divider: None,
             },
             Keybinding {
                 combo: "Shift+PageUp".into(),
                 description: "Jump to first item".into(),
-                divider: None,
             },
             Keybinding {
                 combo: "Shift+Right / l".into(),
                 description: "Next color theme".into(),
-                divider: None,
             },
             Keybinding {
                 combo: "Shift+Left / h".into(),
                 description: "Previous color theme".into(),
-                divider: None,
             },
             Keybinding {
                 combo: "e".into(),
                 description: "Enter editing mode".into(),
-                divider: None,
             },
         ]
     }
@@ -531,8 +500,8 @@ impl App {
     fn handle_key_event(&mut self, key: KeyEvent) -> Result<AppControlFlow> {
         match self.application_mode {
             ApplicationMode::Normal => self.handle_normal_mode_key(key),
-            ApplicationMode::Normal => {
-                self.handle_editing_mode_key(key);
+            ApplicationMode::Killing => {
+                self.handle_killing_mode_key(key);
                 Ok(AppControlFlow::Continue)
             }
             ApplicationMode::Editing => {
@@ -543,6 +512,37 @@ impl App {
                 self.handle_helping_mode_key(key);
                 Ok(AppControlFlow::Continue)
             }
+        }
+    }
+
+    fn handle_killing_mode_key(&mut self, key: KeyEvent) {
+        match (key.modifiers, key.code) {
+            (KeyModifiers::NONE, KeyCode::Left) => {
+                self.kill_process_focused_action = KillProcessAction::Kill;
+            }
+            (KeyModifiers::NONE, KeyCode::Right) => {
+                self.kill_process_focused_action = KillProcessAction::Close;
+            }
+            (KeyModifiers::NONE, KeyCode::Enter) => {
+                match self.kill_process_focused_action {
+                    KillProcessAction::Kill => {
+                        if let Some(item) = self.kill_process_item.take() {
+                            self.kill_process(item.pid);
+                        }
+                    }
+                    KillProcessAction::Close => {
+                        self.kill_process_item.take();
+                    }
+                }
+                self.kill_process_display = false;
+                self.application_mode = ApplicationMode::Normal;
+            }
+            (KeyModifiers::NONE, KeyCode::Esc) => {
+                self.kill_process_display = false;
+                self.application_mode = ApplicationMode::Normal;
+                self.kill_process_item.take();
+            }
+            _ => {}
         }
     }
 
@@ -566,7 +566,7 @@ impl App {
             (KeyModifiers::NONE, KeyCode::F(1)) | (_, KeyCode::Char('?')) => {
                 self.keybindings_display = !self.keybindings_display;
 
-                if (self.keybindings_display) {
+                if self.keybindings_display {
                     self.application_mode = ApplicationMode::Helping;
                 } else {
                     self.application_mode = ApplicationMode::Normal;
@@ -588,6 +588,11 @@ impl App {
                 if self.processes_table_state.selected().is_some() =>
             {
                 self.kill_process_display = !self.kill_process_display;
+                if self.kill_process_display {
+                    self.application_mode = ApplicationMode::Killing;
+                } else {
+                    self.application_mode = ApplicationMode::Normal;
+                }
 
                 if let Some(idx) = self.processes_table_state.selected() {
                     // assuming kill_process_item implements Clone (or Copy),
@@ -611,7 +616,7 @@ impl App {
             | (KeyModifiers::NONE, KeyCode::F(1))
             | (_, KeyCode::Char('?')) => {
                 self.keybindings_display = !self.keybindings_display;
-                if (self.keybindings_display) {
+                if self.keybindings_display {
                     self.application_mode = ApplicationMode::Helping;
                 } else {
                     self.application_mode = ApplicationMode::Normal;
@@ -687,9 +692,9 @@ impl App {
         self.render_kill_popup(frame, area);
     }
     /// helper function to create a centered rect using up certain percentage of the available rect `r`
-    fn popup_area(&self, area: Rect, percent_x: u16, percent_y: u16) -> Rect {
-        let vertical = Layout::vertical([Constraint::Ratio(4, 9)]).flex(Flex::Center);
-        let horizontal = Layout::horizontal([Constraint::Ratio(5, 9)]).flex(Flex::Center);
+    fn popup_area(&self, area: Rect, percent_x: u32, percent_y: u32) -> Rect {
+        let vertical = Layout::vertical([Constraint::Ratio(percent_y, 9)]).flex(Flex::Center);
+        let horizontal = Layout::horizontal([Constraint::Ratio(percent_x, 9)]).flex(Flex::Center);
         let [area] = vertical.areas(area);
         let [area] = horizontal.areas(area);
         area
@@ -724,7 +729,7 @@ impl App {
                 .bg(self.theme_table_colors.buffer_bg)
                 .title("Kill");
 
-            let area = self.popup_area(area, 30, 30);
+            let area = self.popup_area(area, 4, 5);
             frame.render_widget(Clear, area);
             frame.render_widget(block, area);
 
@@ -786,7 +791,7 @@ impl App {
                         .border_style(Style::new().fg(tailwind::RED.c400)),
                     KillProcessAction::Close => Block::bordered()
                         .border_type(BorderType::Plain)
-                        .border_style(Style::new().fg(self.theme_table_colors.footer_border_color)),
+                        .border_style(Style::new().fg(tailwind::GRAY.c400)),
                 });
             let cancel_button = Paragraph::new("Cancel")
                 .alignment(ratatui::layout::Alignment::Center)
@@ -796,7 +801,7 @@ impl App {
                         .border_style(Style::new().fg(tailwind::RED.c400)),
                     KillProcessAction::Kill => Block::bordered()
                         .border_type(BorderType::Plain)
-                        .border_style(Style::new().fg(self.theme_table_colors.footer_border_color)),
+                        .border_style(Style::new().fg(tailwind::GRAY.c400)),
                 });
             frame.render_widget(kill_button, buttons[0]);
             frame.render_widget(cancel_button, buttons[1]);
@@ -853,7 +858,7 @@ impl App {
                     .title("Keybindings"),
             );
 
-            let area = self.popup_area(area, 60, 40);
+            let area = self.popup_area(area, 4, 5);
             self.keybindings_table_visible_rows = area.height as usize - 1;
             frame.render_widget(Clear, area);
             frame.render_stateful_widget(table, area, &mut self.keybindings_table_state);
@@ -919,18 +924,22 @@ impl App {
             .style(header_style)
             .height(1);
 
-        let rows = self.processes_filtered.iter().enumerate().map(|(i, data)| {
-            // let color = match i % 2 {
-            //     0 => self.processes_table_colors.normal_row_color,
-            //     _ => self.processes_table_colors.alt_row_color,
-            // };
-            let item = data.ref_array();
-            item.into_iter()
-                .map(|content| Cell::from(Text::from(format!("{content}"))))
-                .collect::<Row>()
-                .style(Style::new()) // .fg(self.colors.row_fg).bg(color)
-                .height(ITEM_HEIGHT)
-        });
+        let rows = self
+            .processes_filtered
+            .iter()
+            .enumerate()
+            .map(|(_index, data)| {
+                // let color = match i % 2 {
+                //     0 => self.processes_table_colors.normal_row_color,
+                //     _ => self.processes_table_colors.alt_row_color,
+                // };
+                let item = data.ref_array();
+                item.into_iter()
+                    .map(|content| Cell::from(Text::from(format!("{content}"))))
+                    .collect::<Row>()
+                    .style(Style::new()) // .fg(self.colors.row_fg).bg(color)
+                    .height(ITEM_HEIGHT)
+            });
 
         let t = Table::new(
             rows,
@@ -970,50 +979,50 @@ impl App {
             &mut self.processes_table_scroll_state,
         );
     }
-    fn render_footer(&self, frame: &mut Frame, area: Rect) {
-        let info_footer = Paragraph::new(Text::from_iter(INFO_TEXT))
-            .style(
-                Style::new()
-                    .fg(self.theme_table_colors.row_fg)
-                    .bg(self.theme_table_colors.buffer_bg),
-            )
-            .centered()
-            .block(
-                Block::bordered()
-                    .border_type(BorderType::Plain)
-                    .border_style(Style::new().fg(self.theme_table_colors.footer_border_color)),
-            );
-        frame.render_widget(info_footer, area);
-    }
+    // fn render_footer(&self, frame: &mut Frame, area: Rect) {
+    //     let info_footer = Paragraph::new(Text::from_iter(INFO_TEXT))
+    //         .style(
+    //             Style::new()
+    //                 .fg(self.theme_table_colors.row_fg)
+    //                 .bg(self.theme_table_colors.buffer_bg),
+    //         )
+    //         .centered()
+    //         .block(
+    //             Block::bordered()
+    //                 .border_type(BorderType::Plain)
+    //                 .border_style(Style::new().fg(self.theme_table_colors.footer_border_color)),
+    //         );
+    //     frame.render_widget(info_footer, area);
+    // }
 
     //
-    fn draw_process_list(&self, frame: &mut Frame, area: Rect) {
-        // Build your ListItem vec
-        let processes_listed: Vec<ListItem> = self
-            .processes
-            .iter()
-            .enumerate()
-            .map(|(i, proc)| {
-                // one Line for the header…
-                // let header: Line = Line::from(vec![
-                // ]);
-
-                // …and one Line for the details
-                let details: Line = Line::from(vec![
-                    Span::raw(format!("{}", proc.pid)),
-                    Span::raw(format!("{}", proc.port)),
-                    Span::raw(format!("{}", proc.process_path)),
-                    Span::raw(format!("{:?}", proc.port_state)),
-                ]);
-
-                ListItem::new(vec![details])
-            })
-            .collect();
-
-        let processes_widget =
-            List::new(processes_listed).block(Block::bordered().title("Processes"));
-        frame.render_widget(processes_widget, area);
-    }
+    // fn draw_process_list(&self, frame: &mut Frame, area: Rect) {
+    //     // Build your ListItem vec
+    //     let processes_listed: Vec<ListItem> = self
+    //         .processes
+    //         .iter()
+    //         .enumerate()
+    //         .map(|(i, proc)| {
+    //             // one Line for the header…
+    //             // let header: Line = Line::from(vec![
+    //             // ]);
+    //
+    //             // …and one Line for the details
+    //             let details: Line = Line::from(vec![
+    //                 Span::raw(format!("{}", proc.pid)),
+    //                 Span::raw(format!("{}", proc.port)),
+    //                 Span::raw(format!("{}", proc.process_path)),
+    //                 Span::raw(format!("{:?}", proc.port_state)),
+    //             ]);
+    //
+    //             ListItem::new(vec![details])
+    //         })
+    //         .collect();
+    //
+    //     let processes_widget =
+    //         List::new(processes_listed).block(Block::bordered().title("Processes"));
+    //     frame.render_widget(processes_widget, area);
+    // }
 
     fn clear_input(&mut self) {
         self.processes_search_input.clear();
@@ -1100,18 +1109,18 @@ impl App {
         }
     }
 
-    fn fetch_ports() -> Result<Vec<PortInfo>, String> {
-        #[cfg(target_family = "unix")]
-        {
-            unix::fetch_ports()
-        }
-        #[cfg(target_family = "windows")]
-        {
-            windows::fetch_ports()
-        }
-    }
+    // fn fetch_ports() -> Result<Vec<PortInfo>, String> {
+    //     #[cfg(target_family = "unix")]
+    //     {
+    //         unix::fetch_ports()
+    //     }
+    //     #[cfg(target_family = "windows")]
+    //     {
+    //         windows::fetch_ports()
+    //     }
+    // }
 
-    fn kill_process(pid: u32) -> KillProcessResponse {
+    fn kill_process(&mut self, pid: u32) -> KillProcessResponse {
         #[cfg(target_family = "unix")]
         {
             unix::kill_process(pid)
@@ -1122,24 +1131,24 @@ impl App {
         }
     }
 
-    fn get_processes_using_port(port: u16, item_pid: u32) -> Result<ProcessInfoResponse, String> {
-        #[cfg(target_family = "unix")]
-        {
-            unix::get_processes_using_port(port, item_pid)
-        }
-        #[cfg(target_family = "windows")]
-        {
-            return Ok(ProcessInfoResponse {
-                port_state: ProcessPortState::Using,
-                data: Some(ProcessInfo {
-                    pid: 5678,
-                    port,
-                    process_name: "mocked_process.exe".to_string(),
-                    process_path: item_pid.to_string(),
-                }),
-            });
-        }
-    }
+    // fn get_processes_using_port(port: u16, item_pid: u32) -> Result<ProcessInfoResponse, String> {
+    //     #[cfg(target_family = "unix")]
+    //     {
+    //         unix::get_processes_using_port(port, item_pid)
+    //     }
+    //     #[cfg(target_family = "windows")]
+    //     {
+    //         return Ok(ProcessInfoResponse {
+    //             port_state: ProcessPortState::Using,
+    //             data: Some(ProcessInfo {
+    //                 pid: 5678,
+    //                 port,
+    //                 process_name: "mocked_process.exe".to_string(),
+    //                 process_path: item_pid.to_string(),
+    //             }),
+    //         });
+    //     }
+    // }
 }
 
 fn keybindings_constraint_len_calculator(items: &[Keybinding]) -> (u16, u16) {
