@@ -437,7 +437,7 @@ impl App {
 
         let current = self.keybindings_table_state.selected().unwrap_or(0);
         // move down by one screenful, clamped to last row
-        let new = (current + self.processes_table_visible_rows).min(len - 1);
+        let new = (current + self.keybindings_table_visible_rows).min(len - 1);
 
         self.keybindings_table_state.select(Some(new));
         self.keybindings_table_scroll_state = self
@@ -452,7 +452,7 @@ impl App {
 
         let current = self.keybindings_table_state.selected().unwrap_or(0);
         // move up by one screenful, clamped at zero
-        let new = current.saturating_sub(self.processes_table_visible_rows);
+        let new = current.saturating_sub(self.keybindings_table_visible_rows);
 
         self.keybindings_table_state.select(Some(new));
         self.keybindings_table_scroll_state = self
@@ -699,7 +699,7 @@ impl App {
             let table = Table::new(
                 rows,
                 [
-                    Constraint::Length(self.keybindings_table_longest_item_lens.0),
+                    Constraint::Length(self.keybindings_table_longest_item_lens.0 + 1),
                     Constraint::Min(self.keybindings_table_longest_item_lens.1),
                 ],
             )
@@ -715,6 +715,7 @@ impl App {
             );
 
             let area = self.popup_area(area, 60, 40);
+            self.keybindings_table_visible_rows = area.height as usize - 1;
             frame.render_widget(Clear, area);
             frame.render_stateful_widget(table, area, &mut self.keybindings_table_state);
 
