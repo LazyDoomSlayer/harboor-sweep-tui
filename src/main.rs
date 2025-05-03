@@ -87,26 +87,29 @@ fn main() -> color_eyre::Result<()> {
 /// The main application which holds the state and logic of the application.
 #[derive(Debug, Default)]
 pub struct App {
+    application_mode: ApplicationMode,
+
     // Search widget
-    input_mode: InputMode,
-    port_process_user_input: String,
-    port_process_user_input_character_index: usize,
-    is_searching: bool,
+    processes_search_input: String,
+    processes_search_input_index: usize,
+    processes_search_display: bool,
     // Help Widget
-    show_help: bool,
+    keybindings_display: bool,
+    keybindings_table_state: TableState,
+    keybindings_table_scroll_state: ScrollbarState,
+    keybindings_table_visible_rows: usize,
 
     // processes
     processes: Vec<PortInfo>,
-    filtered_processes: Vec<PortInfo>,
-    is_monitoring: bool,
+    processes_filtered: Vec<PortInfo>,
 
     // Proccess Table list
-    state: TableState,
-    scroll_state: ScrollbarState,
-    longest_item_lens: (u16, u16, u16, u16, u16),
-    colors: TableColors,
-    color_index: usize,
-    visible_rows: usize,
+    processes_table_state: TableState,
+    processes_table_scroll_state: ScrollbarState,
+    processes_table_longest_item_lens: (u16, u16, u16, u16, u16),
+    processes_table_colors: TableColors,
+    processes_table_color_index: usize,
+    processes_table_visible_rows: usize,
 }
 
 enum MultithreadingEvent {
@@ -169,7 +172,7 @@ impl PortInfo {
 }
 
 #[derive(Debug, Default)]
-enum InputMode {
+enum ApplicationMode {
     #[default]
     Normal,
     Editing,
@@ -186,31 +189,30 @@ impl App {
     pub fn new() -> Self {
         Self {
             // Search widget
-            port_process_user_input: String::new(),
-            port_process_user_input_character_index: 0,
-            input_mode: InputMode::Normal,
-            is_searching: false,
+            processes_search_input: String::new(),
+            processes_search_input_index: 0,
+            application_mode: ApplicationMode::Normal,
+            processes_search_display: false,
             // Help Widget
-            show_help: false,
+            keybindings_display: false,
             // Processes
             processes: Vec::new(),
-            filtered_processes: Vec::new(),
-            is_monitoring: false,
+            processes_filtered: Vec::new(),
             // Table list
-            state: TableState::default(),
-            scroll_state: ScrollbarState::new((1 * ITEM_HEIGHT) as usize),
-            longest_item_lens: (5, 5, 30, 55, 5),
-            colors: TableColors::new(&PALETTES[0]),
-            color_index: 0,
-            visible_rows: 0,
+            processes_table_state: TableState::default(),
+            processes_table_scroll_state: ScrollbarState::new((1 * ITEM_HEIGHT) as usize),
+            processes_table_longest_item_lens: (5, 5, 30, 55, 5),
+            processes_table_colors: TableColors::new(&PALETTES[0]),
+            processes_table_color_index: 0,
+            processes_table_visible_rows: 0,
         }
     }
 
     /// Table list
     pub fn next_row(&mut self) {
-        let i = match self.state.selected() {
+        let i = match self.processes_table_state.selected() {
             Some(i) => {
-                if i >= self.filtered_processes.len() - 1 {
+                if i >= self.processes_filtered.len() - 1 {
                     0
                 } else {
                     i + 1
@@ -218,79 +220,89 @@ impl App {
             }
             None => 0,
         };
-        self.state.select(Some(i));
-        self.scroll_state = self.scroll_state.position(i * ITEM_HEIGHT as usize);
+        self.processes_table_state.select(Some(i));
+        self.processes_table_scroll_state = self
+            .processes_table_scroll_state
+            .position(i * ITEM_HEIGHT as usize);
     }
 
     pub fn previous_row(&mut self) {
-        let i = match self.state.selected() {
+        let i = match self.processes_table_state.selected() {
             Some(i) => {
                 if i == 0 {
-                    self.filtered_processes.len() - 1
+                    self.processes_filtered.len() - 1
                 } else {
                     i - 1
                 }
             }
             None => 0,
         };
-        self.state.select(Some(i));
-        self.scroll_state = self.scroll_state.position(i * ITEM_HEIGHT as usize);
+        self.processes_table_state.select(Some(i));
+        self.processes_table_scroll_state = self
+            .processes_table_scroll_state
+            .position(i * ITEM_HEIGHT as usize);
     }
 
     pub fn go_to_first(&mut self) {
-        if !self.filtered_processes.is_empty() {
-            self.state.select(Some(0));
-            self.scroll_state = self.scroll_state.position(0);
+        if !self.processes_filtered.is_empty() {
+            self.processes_table_state.select(Some(0));
+            self.processes_table_scroll_state = self.processes_table_scroll_state.position(0);
         }
     }
 
     pub fn go_to_last(&mut self) {
-        let len = self.filtered_processes.len();
+        let len = self.processes_filtered.len();
         if len > 0 {
             let last = len - 1;
-            self.state.select(Some(last));
-            self.scroll_state = self.scroll_state.position(last * ITEM_HEIGHT as usize);
+            self.processes_table_state.select(Some(last));
+            self.processes_table_scroll_state = self
+                .processes_table_scroll_state
+                .position(last * ITEM_HEIGHT as usize);
         }
     }
 
     pub fn page_down(&mut self) {
-        let len = self.filtered_processes.len();
+        let len = self.processes_filtered.len();
         if len == 0 {
             return;
         }
 
-        let current = self.state.selected().unwrap_or(0);
+        let current = self.processes_table_state.selected().unwrap_or(0);
         // move down by one screenful, clamped to last row
-        let new = (current + self.visible_rows).min(len - 1);
+        let new = (current + self.processes_table_visible_rows).min(len - 1);
 
-        self.state.select(Some(new));
-        self.scroll_state = self.scroll_state.position(new * ITEM_HEIGHT as usize);
+        self.processes_table_state.select(Some(new));
+        self.processes_table_scroll_state = self
+            .processes_table_scroll_state
+            .position(new * ITEM_HEIGHT as usize);
     }
 
     pub fn page_up(&mut self) {
-        let len = self.filtered_processes.len();
+        let len = self.processes_filtered.len();
         if len == 0 {
             return;
         }
 
-        let current = self.state.selected().unwrap_or(0);
+        let current = self.processes_table_state.selected().unwrap_or(0);
         // move up by one screenful, clamped at zero
-        let new = current.saturating_sub(self.visible_rows);
+        let new = current.saturating_sub(self.processes_table_visible_rows);
 
-        self.state.select(Some(new));
-        self.scroll_state = self.scroll_state.position(new * ITEM_HEIGHT as usize);
+        self.processes_table_state.select(Some(new));
+        self.processes_table_scroll_state = self
+            .processes_table_scroll_state
+            .position(new * ITEM_HEIGHT as usize);
     }
 
     pub fn next_color(&mut self) {
-        self.color_index = (self.color_index + 1) % PALETTES.len();
+        self.processes_table_color_index = (self.processes_table_color_index + 1) % PALETTES.len();
     }
 
     pub fn previous_color(&mut self) {
         let count = PALETTES.len();
-        self.color_index = (self.color_index + count - 1) % count;
+        self.processes_table_color_index = (self.processes_table_color_index + count - 1) % count;
     }
     pub fn set_colors(&mut self) {
-        self.colors = TableColors::new(&PALETTES[self.color_index]);
+        self.processes_table_colors = TableColors::new(&PALETTES[self.processes_table_color_index]);
     }
 
     /// Run the application's main loop.
@@ -317,8 +329,8 @@ impl App {
     }
 
     fn update_filtered_processes(&mut self) {
-        let q = self.port_process_user_input.to_lowercase();
-        self.filtered_processes = self
+        let q = self.processes_search_input.to_lowercase();
+        self.processes_filtered = self
             .processes
             .iter()
             .filter(|p| {
@@ -332,13 +344,13 @@ impl App {
     }
 
     fn handle_key_event(&mut self, key: KeyEvent) -> Result<AppControlFlow> {
-        match self.input_mode {
-            InputMode::Normal => self.handle_normal_mode_key(key),
-            InputMode::Editing => {
+        match self.application_mode {
+            ApplicationMode::Normal => self.handle_normal_mode_key(key),
+            ApplicationMode::Editing => {
                 self.handle_editing_mode_key(key);
                 Ok(AppControlFlow::Continue)
             }
-            InputMode::Helping => {
+            ApplicationMode::Helping => {
                 self.handle_helping_mode_key(key);
                 Ok(AppControlFlow::Continue)
             }
@@ -355,25 +367,25 @@ impl App {
             }
             // Toggle UI elements
             (KeyModifiers::CONTROL, KeyCode::Char('f' | 'F')) => {
-                self.is_searching = !self.is_searching;
+                self.processes_search_display = !self.processes_search_display;
                 self.clear_input();
 
-                if self.is_searching {
-                    self.input_mode = InputMode::Editing;
+                if self.processes_search_display {
+                    self.application_mode = ApplicationMode::Editing;
                 }
             }
             (KeyModifiers::NONE, KeyCode::F(1)) => {
-                self.show_help = !self.show_help;
+                self.keybindings_display = !self.keybindings_display;
 
-                if (self.show_help) {
-                    self.input_mode = InputMode::Helping;
+                if (self.keybindings_display) {
+                    self.application_mode = ApplicationMode::Helping;
                 } else {
-                    self.input_mode = InputMode::Normal;
+                    self.application_mode = ApplicationMode::Normal;
                 }
             }
             // Modify Search input mode
             (KeyModifiers::NONE, KeyCode::Char('e')) => {
-                self.input_mode = InputMode::Editing;
+                self.application_mode = ApplicationMode::Editing;
             }
             // Navigate in the list
             (KeyModifiers::SHIFT, KeyCode::PageUp) => self.go_to_first(),
@@ -395,11 +407,11 @@ impl App {
     fn handle_helping_mode_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Esc => {
-                self.show_help = !self.show_help;
-                if (self.show_help) {
-                    self.input_mode = InputMode::Helping;
+                self.keybindings_display = !self.keybindings_display;
+                if (self.keybindings_display) {
+                    self.application_mode = ApplicationMode::Helping;
                 } else {
-                    self.input_mode = InputMode::Normal;
+                    self.application_mode = ApplicationMode::Normal;
                 }
             }
             _ => {}
@@ -412,21 +424,21 @@ impl App {
             KeyCode::Left => self.move_cursor_left(),
             KeyCode::Right => self.move_cursor_right(),
             KeyCode::Down => {
-                self.input_mode = InputMode::Normal;
+                self.application_mode = ApplicationMode::Normal;
                 self.next_row()
             }
             KeyCode::Up => {
-                self.input_mode = InputMode::Normal;
+                self.application_mode = ApplicationMode::Normal;
                 self.previous_row()
             }
             KeyCode::Esc => {
-                self.input_mode = InputMode::Normal;
-                self.is_searching = !self.is_searching;
+                self.application_mode = ApplicationMode::Normal;
+                self.processes_search_display = !self.processes_search_display;
 
                 self.clear_input();
 
-                if self.is_searching {
-                    self.input_mode = InputMode::Editing;
+                if self.processes_search_display {
+                    self.application_mode = ApplicationMode::Editing;
                 }
             }
             _ => {}
@@ -443,16 +455,16 @@ impl App {
         self.set_colors();
         let area = frame.area();
 
-        if !self.is_searching {
+        if !self.processes_search_display {
             let [table_area] = Layout::vertical([Constraint::Min(1)]).areas(area);
-            self.visible_rows = table_area.height as usize - 1;
+            self.processes_table_visible_rows = table_area.height as usize - 1;
             self.render_table(frame, table_area);
             self.render_scrollbar(frame, table_area);
         } else {
             let [input_area, table_area] =
                 Layout::vertical([Constraint::Length(3), Constraint::Min(1)]).areas(area);
 
-            self.visible_rows = table_area.height as usize - 1;
+            self.processes_table_visible_rows = table_area.height as usize - 1;
 
             self.render_search(frame, input_area);
             self.render_table(frame, table_area);
@@ -471,10 +483,10 @@ impl App {
     }
 
     fn render_help_popup(&mut self, frame: &mut Frame, area: Rect) {
-        if self.show_help {
+        if self.keybindings_display {
             let block = Block::bordered()
                 .border_type(BorderType::Plain)
-                .border_style(Style::new().fg(self.colors.footer_border_color))
+                .border_style(Style::new().fg(self.processes_table_colors.footer_border_color))
                 .title("Keybindings");
             let area = self.popup_area(area, 60, 20);
             frame.render_widget(Clear, area);
@@ -483,39 +495,39 @@ impl App {
     }
 
     fn render_search(&mut self, frame: &mut Frame, area: Rect) {
-        let input = Paragraph::new(self.port_process_user_input.as_str())
-            .style(match self.input_mode {
-                InputMode::Normal => Style::new()
-                    .fg(self.colors.row_fg)
-                    .bg(self.colors.buffer_bg),
-                InputMode::Editing => Style::default()
-                    .fg(self.colors.row_fg)
-                    .bg(self.colors.buffer_bg),
-                InputMode::Helping => Style::default()
-                    .fg(self.colors.row_fg)
-                    .bg(self.colors.buffer_bg),
+        let input = Paragraph::new(self.processes_search_input.as_str())
+            .style(match self.application_mode {
+                ApplicationMode::Normal => Style::new()
+                    .fg(self.processes_table_colors.row_fg)
+                    .bg(self.processes_table_colors.buffer_bg),
+                ApplicationMode::Editing => Style::default()
+                    .fg(self.processes_table_colors.row_fg)
+                    .bg(self.processes_table_colors.buffer_bg),
+                ApplicationMode::Helping => Style::default()
+                    .fg(self.processes_table_colors.row_fg)
+                    .bg(self.processes_table_colors.buffer_bg),
             })
             .block(
                 Block::bordered()
                     .border_type(BorderType::Plain)
-                    .border_style(Style::new().fg(self.colors.footer_border_color))
-                    .title(" Search "),
+                    .border_style(Style::new().fg(self.processes_table_colors.footer_border_color))
+                    .title("Search"),
             );
 
         frame.render_widget(input, area);
 
-        match self.input_mode {
+        match self.application_mode {
             // Hide the cursor. `Frame` does this by default, so we don't need to do anything here
-            InputMode::Normal => {}
-            InputMode::Helping => {}
+            ApplicationMode::Normal => {}
+            ApplicationMode::Helping => {}
 
             // Make the cursor visible and ask ratatui to put it at the specified coordinates after
             // rendering
             #[allow(clippy::cast_possible_truncation)]
-            InputMode::Editing => frame.set_cursor_position(Position::new(
+            ApplicationMode::Editing => frame.set_cursor_position(Position::new(
                 // Draw the cursor at the current position in the input field.
                 // This position is can be controlled via the left and right arrow key
-                area.x + self.port_process_user_input_character_index as u16 + 1,
+                area.x + self.processes_search_input_index as u16 + 1,
                 // Move one line down, from the border to the input line
                 area.y + 1,
             )),
@@ -524,14 +536,14 @@ impl App {
 
     fn render_table(&mut self, frame: &mut Frame, area: Rect) {
         let header_style = Style::default()
-            .fg(self.colors.header_fg)
-            .bg(self.colors.header_bg);
+            .fg(self.processes_table_colors.header_fg)
+            .bg(self.processes_table_colors.header_bg);
         let selected_row_style = Style::default()
             .add_modifier(Modifier::REVERSED)
-            .fg(self.colors.selected_row_style_fg);
+            .fg(self.processes_table_colors.selected_row_style_fg);
         let selected_cell_style = Style::default()
             .add_modifier(Modifier::REVERSED)
-            .fg(self.colors.selected_cell_style_fg);
+            .fg(self.processes_table_colors.selected_cell_style_fg);
 
         let header = ["PID", "Port", "Process Name", "Process Path", "Listener"]
             .into_iter()
@@ -540,11 +552,11 @@ impl App {
             .style(header_style)
             .height(1);
 
-        let rows = self.filtered_processes.iter().enumerate().map(|(i, data)| {
-            let color = match i % 2 {
-                0 => self.colors.normal_row_color,
-                _ => self.colors.alt_row_color,
-            };
+        let rows = self.processes_filtered.iter().enumerate().map(|(i, data)| {
+            // let color = match i % 2 {
+            //     0 => self.processes_table_colors.normal_row_color,
+            //     _ => self.processes_table_colors.alt_row_color,
+            // };
             let item = data.ref_array();
             item.into_iter()
                 .map(|content| Cell::from(Text::from(format!("{content}"))))
@@ -556,17 +568,17 @@ impl App {
         let t = Table::new(
             rows,
             [
-                Constraint::Length(self.longest_item_lens.0),
-                Constraint::Min(self.longest_item_lens.1),
-                Constraint::Min(self.longest_item_lens.2),
-                Constraint::Min(self.longest_item_lens.3),
-                Constraint::Min(self.longest_item_lens.4),
+                Constraint::Length(self.processes_table_longest_item_lens.0),
+                Constraint::Min(self.processes_table_longest_item_lens.1),
+                Constraint::Min(self.processes_table_longest_item_lens.2),
+                Constraint::Min(self.processes_table_longest_item_lens.3),
+                Constraint::Min(self.processes_table_longest_item_lens.4),
             ],
         )
         .header(header)
         .row_highlight_style(selected_row_style)
         .cell_highlight_style(selected_cell_style)
-        .bg(self.colors.buffer_bg)
+        .bg(self.processes_table_colors.buffer_bg)
         .highlight_spacing(HighlightSpacing::Always);
 
         // .block(
@@ -575,7 +587,7 @@ impl App {
         //         .border_style(Style::new().fg(self.colors.footer_border_color)),
         // )
 
-        frame.render_stateful_widget(t, area, &mut self.state);
+        frame.render_stateful_widget(t, area, &mut self.processes_table_state);
     }
 
     fn render_scrollbar(&mut self, frame: &mut Frame, area: Rect) {
@@ -588,21 +600,21 @@ impl App {
                 vertical: 1,
                 horizontal: 1,
             }),
-            &mut self.scroll_state,
+            &mut self.processes_table_scroll_state,
         );
     }
     fn render_footer(&self, frame: &mut Frame, area: Rect) {
         let info_footer = Paragraph::new(Text::from_iter(INFO_TEXT))
             .style(
                 Style::new()
-                    .fg(self.colors.row_fg)
-                    .bg(self.colors.buffer_bg),
+                    .fg(self.processes_table_colors.row_fg)
+                    .bg(self.processes_table_colors.buffer_bg),
             )
             .centered()
             .block(
                 Block::bordered()
                     .border_type(BorderType::Plain)
-                    .border_style(Style::new().fg(self.colors.footer_border_color)),
+                    .border_style(Style::new().fg(self.processes_table_colors.footer_border_color)),
             );
         frame.render_widget(info_footer, area);
     }
@@ -637,62 +649,58 @@ impl App {
     }
 
     fn clear_input(&mut self) {
-        self.port_process_user_input.clear();
-        self.port_process_user_input_character_index = 0;
+        self.processes_search_input.clear();
+        self.processes_search_input_index = 0;
         self.update_filtered_processes();
     }
 
     fn clamp_cursor(&self, new_cursor_pos: usize) -> usize {
-        new_cursor_pos.clamp(0, self.port_process_user_input.chars().count())
+        new_cursor_pos.clamp(0, self.processes_search_input.chars().count())
     }
     fn move_cursor_left(&mut self) {
-        let cursor_moved_left = self
-            .port_process_user_input_character_index
-            .saturating_sub(1);
-        self.port_process_user_input_character_index = self.clamp_cursor(cursor_moved_left);
+        let cursor_moved_left = self.processes_search_input_index.saturating_sub(1);
+        self.processes_search_input_index = self.clamp_cursor(cursor_moved_left);
     }
 
     fn move_cursor_right(&mut self) {
-        let cursor_moved_right = self
-            .port_process_user_input_character_index
-            .saturating_add(1);
-        self.port_process_user_input_character_index = self.clamp_cursor(cursor_moved_right);
+        let cursor_moved_right = self.processes_search_input_index.saturating_add(1);
+        self.processes_search_input_index = self.clamp_cursor(cursor_moved_right);
     }
 
     fn byte_index(&self) -> usize {
-        self.port_process_user_input
+        self.processes_search_input
             .char_indices()
             .map(|(i, _)| i)
-            .nth(self.port_process_user_input_character_index)
-            .unwrap_or(self.port_process_user_input.len())
+            .nth(self.processes_search_input_index)
+            .unwrap_or(self.processes_search_input.len())
     }
     fn enter_char(&mut self, new_char: char) {
         let index = self.byte_index();
-        self.port_process_user_input.insert(index, new_char);
+        self.processes_search_input.insert(index, new_char);
         self.move_cursor_right();
         self.update_filtered_processes();
     }
     fn delete_char(&mut self) {
-        let is_not_cursor_leftmost = self.port_process_user_input_character_index != 0;
+        let is_not_cursor_leftmost = self.processes_search_input_index != 0;
         if is_not_cursor_leftmost {
             // Method "remove" is not used on the saved text for deleting the selected char.
             // Reason: Using remove on String works on bytes instead of the chars.
             // Using remove would require special care because of char boundaries.
 
-            let current_index = self.port_process_user_input_character_index;
+            let current_index = self.processes_search_input_index;
             let from_left_to_current_index = current_index - 1;
 
             // Getting all characters before the selected character.
             let before_char_to_delete = self
-                .port_process_user_input
+                .processes_search_input
                 .chars()
                 .take(from_left_to_current_index);
             // Getting all characters after selected character.
-            let after_char_to_delete = self.port_process_user_input.chars().skip(current_index);
+            let after_char_to_delete = self.processes_search_input.chars().skip(current_index);
 
             // Put all characters together except the selected one.
             // By leaving the selected one out, it is forgotten and therefore deleted.
-            self.port_process_user_input =
+            self.processes_search_input =
                 before_char_to_delete.chain(after_char_to_delete).collect();
             self.move_cursor_left();
             self.update_filtered_processes();
@@ -704,8 +712,9 @@ impl App {
             Ok(ports) => {
                 self.processes = ports;
                 self.update_filtered_processes();
-                let length = self.filtered_processes.len() * ITEM_HEIGHT as usize;
-                self.scroll_state = self.scroll_state.content_length(length);
+                let length = self.processes_filtered.len() * ITEM_HEIGHT as usize;
+                self.processes_table_scroll_state =
+                    self.processes_table_scroll_state.content_length(length);
             }
             Err(e) => {
                 eprintln!("Error fetching ports: {}", e);
