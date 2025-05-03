@@ -100,7 +100,7 @@ pub struct App {
     filtered_processes: Vec<PortInfo>,
     is_monitoring: bool,
 
-    // Table list
+    // Proccess Table list
     state: TableState,
     scroll_state: ScrollbarState,
     longest_item_lens: (u16, u16, u16, u16, u16),
@@ -173,6 +173,7 @@ enum InputMode {
     #[default]
     Normal,
     Editing,
+    Helping,
 }
 
 enum AppControlFlow {
@@ -337,6 +338,10 @@ impl App {
                 self.handle_editing_mode_key(key);
                 Ok(AppControlFlow::Continue)
             }
+            InputMode::Helping => {
+                self.handle_helping_mode_key(key);
+                Ok(AppControlFlow::Continue)
+            }
         }
     }
 
@@ -357,8 +362,14 @@ impl App {
                     self.input_mode = InputMode::Editing;
                 }
             }
-            (KeyModifiers::NONE, KeyCode::F(1) | KeyCode::Char('?')) => {
+            (KeyModifiers::NONE, KeyCode::F(1)) => {
                 self.show_help = !self.show_help;
+
+                if (self.show_help) {
+                    self.input_mode = InputMode::Helping;
+                } else {
+                    self.input_mode = InputMode::Normal;
+                }
             }
             // Modify Search input mode
             (KeyModifiers::NONE, KeyCode::Char('e')) => {
@@ -381,6 +392,19 @@ impl App {
         Ok(AppControlFlow::Continue)
     }
 
+    fn handle_helping_mode_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc => {
+                self.show_help = !self.show_help;
+                if (self.show_help) {
+                    self.input_mode = InputMode::Helping;
+                } else {
+                    self.input_mode = InputMode::Normal;
+                }
+            }
+            _ => {}
+        }
+    }
     fn handle_editing_mode_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Char(to_insert) => self.enter_char(to_insert),
@@ -424,13 +448,6 @@ impl App {
             self.visible_rows = table_area.height as usize - 1;
             self.render_table(frame, table_area);
             self.render_scrollbar(frame, table_area);
-
-            if self.show_help {
-                let block = Block::bordered().title(" Help ");
-                let area = self.popup_area(area, 60, 20);
-                // frame.render_widget(Clear, area); //this clears out the background
-                frame.render_widget(block, area);
-            }
         } else {
             let [input_area, table_area] =
                 Layout::vertical([Constraint::Length(3), Constraint::Min(1)]).areas(area);
@@ -440,14 +457,9 @@ impl App {
             self.render_search(frame, input_area);
             self.render_table(frame, table_area);
             self.render_scrollbar(frame, table_area);
-
-            if self.show_help {
-                let block = Block::bordered().title(" Help ");
-                let area = self.popup_area(area, 60, 20);
-                // frame.render_widget(Clear, area); //this clears out the background
-                frame.render_widget(block, area);
-            }
         }
+
+        self.render_help_popup(frame, area);
     }
     /// helper function to create a centered rect using up certain percentage of the available rect `r`
     fn popup_area(&self, area: Rect, percent_x: u16, percent_y: u16) -> Rect {
@@ -458,6 +470,18 @@ impl App {
         area
     }
 
+    fn render_help_popup(&mut self, frame: &mut Frame, area: Rect) {
+        if self.show_help {
+            let block = Block::bordered()
+                .border_type(BorderType::Plain)
+                .border_style(Style::new().fg(self.colors.footer_border_color))
+                .title("Keybindings");
+            let area = self.popup_area(area, 60, 20);
+            frame.render_widget(Clear, area);
+            frame.render_widget(block, area);
+        }
+    }
+
     fn render_search(&mut self, frame: &mut Frame, area: Rect) {
         let input = Paragraph::new(self.port_process_user_input.as_str())
             .style(match self.input_mode {
@@ -465,6 +489,9 @@ impl App {
                     .fg(self.colors.row_fg)
                     .bg(self.colors.buffer_bg),
                 InputMode::Editing => Style::default()
+                    .fg(self.colors.row_fg)
+                    .bg(self.colors.buffer_bg),
+                InputMode::Helping => Style::default()
                     .fg(self.colors.row_fg)
                     .bg(self.colors.buffer_bg),
             })
@@ -480,6 +507,7 @@ impl App {
         match self.input_mode {
             // Hide the cursor. `Frame` does this by default, so we don't need to do anything here
             InputMode::Normal => {}
+            InputMode::Helping => {}
 
             // Make the cursor visible and ask ratatui to put it at the specified coordinates after
             // rendering
