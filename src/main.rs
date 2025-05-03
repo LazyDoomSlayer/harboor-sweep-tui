@@ -7,23 +7,22 @@ pub mod unix;
 
 #[cfg(target_family = "windows")]
 pub mod windows;
-use color_eyre::Result;
 
+use color_eyre::Result;
 use ratatui::{
     DefaultTerminal, Frame,
     crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
-    layout::{Constraint, Layout, Margin, Position, Rect},
+    layout::{Constraint, Flex, Layout, Margin, Position, Rect},
     prelude::{Color, Style},
     style::{self, Modifier, Stylize, palette::tailwind},
     text::{Line, Span, Text},
     widgets::{
-        Block, BorderType, Cell, HighlightSpacing, List, ListItem, Paragraph, Row, Scrollbar,
-        ScrollbarOrientation, ScrollbarState, Table, TableState,
+        Block, BorderType, Cell, Clear, HighlightSpacing, List, ListItem, Paragraph, Row,
+        Scrollbar, ScrollbarOrientation, ScrollbarState, Table, TableState,
     },
 };
 
-use std::sync::{Arc, Mutex, mpsc};
-use unicode_width::UnicodeWidthStr;
+use std::{sync::mpsc, thread, time};
 
 const PALETTES: [tailwind::Palette; 5] = [
     tailwind::GRAY,
@@ -69,13 +68,13 @@ impl TableColors {
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
 
-    let (event_tx, event_rx) = std::sync::mpsc::channel::<MultithreadingEvent>();
+    let (event_tx, event_rx) = mpsc::channel::<MultithreadingEvent>();
     let tx_to_input_events = event_tx.clone();
-    std::thread::spawn(move || {
+    thread::spawn(move || {
         handle_input_events(tx_to_input_events);
     });
     let tx_to_background_thread = event_tx.clone();
-    std::thread::spawn(move || {
+    thread::spawn(move || {
         run_background_thread(tx_to_background_thread);
     });
 
@@ -88,10 +87,13 @@ fn main() -> color_eyre::Result<()> {
 /// The main application which holds the state and logic of the application.
 #[derive(Debug, Default)]
 pub struct App {
+    // Search widget
     input_mode: InputMode,
     port_process_user_input: String,
     port_process_user_input_character_index: usize,
     is_searching: bool,
+    // Help Widget
+    show_help: bool,
 
     // processes
     processes: Vec<PortInfo>,
@@ -125,7 +127,7 @@ fn run_background_thread(tx: mpsc::Sender<MultithreadingEvent>) {
         let event = MultithreadingEvent::ProccesesUpdate(Vec::new());
         tx.send(event).unwrap();
 
-        std::thread::sleep(std::time::Duration::from_millis(2_000));
+        thread::sleep(time::Duration::from_millis(2_000));
     }
 }
 
@@ -173,10 +175,13 @@ impl App {
     /// Construct a new instance of [`App`].
     pub fn new() -> Self {
         Self {
+            // Search widget
             port_process_user_input: String::new(),
             port_process_user_input_character_index: 0,
             input_mode: InputMode::Normal,
             is_searching: false,
+            // Help Widget
+            show_help: false,
             // Processes
             processes: Vec::new(),
             filtered_processes: Vec::new(),
@@ -343,6 +348,9 @@ impl App {
                     self.input_mode = InputMode::Editing;
                 }
             }
+            (KeyModifiers::NONE, KeyCode::F(1) | KeyCode::Char('?')) => {
+                self.show_help = !self.show_help;
+            }
             // Modify Search input mode
             (KeyModifiers::NONE, KeyCode::Char('e')) => {
                 self.input_mode = InputMode::Editing;
@@ -400,22 +408,45 @@ impl App {
     /// - <https://github.com/ratatui/ratatui/tree/main/ratatui-widgets/examples>
     fn render(&mut self, frame: &mut Frame) {
         self.set_colors();
+        let area = frame.area();
 
         if !self.is_searching {
-            let [table_area] = Layout::vertical([Constraint::Min(1)]).areas(frame.area());
+            let [table_area] = Layout::vertical([Constraint::Min(1)]).areas(area);
             self.visible_rows = table_area.height as usize - 1;
             self.render_table(frame, table_area);
             self.render_scrollbar(frame, table_area);
+
+            if self.show_help {
+                let block = Block::bordered().title(" Help ");
+                let area = self.popup_area(area, 60, 20);
+                // frame.render_widget(Clear, area); //this clears out the background
+                frame.render_widget(block, area);
+            }
         } else {
             let [input_area, table_area] =
-                Layout::vertical([Constraint::Length(3), Constraint::Min(1)]).areas(frame.area());
+                Layout::vertical([Constraint::Length(3), Constraint::Min(1)]).areas(area);
 
             self.visible_rows = table_area.height as usize - 1;
 
             self.render_search(frame, input_area);
             self.render_table(frame, table_area);
             self.render_scrollbar(frame, table_area);
+
+            if self.show_help {
+                let block = Block::bordered().title(" Help ");
+                let area = self.popup_area(area, 60, 20);
+                // frame.render_widget(Clear, area); //this clears out the background
+                frame.render_widget(block, area);
+            }
         }
+    }
+    /// helper function to create a centered rect using up certain percentage of the available rect `r`
+    fn popup_area(&self, area: Rect, percent_x: u16, percent_y: u16) -> Rect {
+        let vertical = Layout::vertical([Constraint::Percentage(percent_y)]).flex(Flex::Center);
+        let horizontal = Layout::horizontal([Constraint::Percentage(percent_x)]).flex(Flex::Center);
+        let [area] = vertical.areas(area);
+        let [area] = horizontal.areas(area);
+        area
     }
 
     fn render_search(&mut self, frame: &mut Frame, area: Rect) {
@@ -538,6 +569,7 @@ impl App {
             );
         frame.render_widget(info_footer, area);
     }
+
     //
     fn draw_process_list(&self, frame: &mut Frame, area: Rect) {
         // Build your ListItem vec
