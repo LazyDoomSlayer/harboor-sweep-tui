@@ -540,7 +540,7 @@ impl App {
                     self.application_mode = ApplicationMode::Editing;
                 }
             }
-            (KeyModifiers::NONE, KeyCode::F(1)) => {
+            (KeyModifiers::NONE, KeyCode::F(1)) | (_, KeyCode::Char('?')) => {
                 self.keybindings_display = !self.keybindings_display;
 
                 if (self.keybindings_display) {
@@ -576,7 +576,9 @@ impl App {
 
     fn handle_helping_mode_key(&mut self, key: KeyEvent) {
         match (key.modifiers, key.code) {
-            (KeyModifiers::NONE, KeyCode::Esc) => {
+            (KeyModifiers::NONE, KeyCode::Esc)
+            | (KeyModifiers::NONE, KeyCode::F(1))
+            | (_, KeyCode::Char('?')) => {
                 self.keybindings_display = !self.keybindings_display;
                 if (self.keybindings_display) {
                     self.application_mode = ApplicationMode::Helping;
@@ -595,6 +597,7 @@ impl App {
             (KeyModifiers::NONE, KeyCode::Char('k') | KeyCode::Up) => {
                 self.keybindings_table_previous_row()
             }
+
             _ => {}
         }
     }
@@ -622,6 +625,7 @@ impl App {
                     self.application_mode = ApplicationMode::Editing;
                 }
             }
+
             _ => {}
         }
     }
