@@ -222,6 +222,22 @@ impl App {
         self.scroll_state = self.scroll_state.position(i * ITEM_HEIGHT as usize);
     }
 
+    pub fn go_to_first(&mut self) {
+        if !self.filtered_processes.is_empty() {
+            self.state.select(Some(0));
+            self.scroll_state = self.scroll_state.position(0);
+        }
+    }
+
+    pub fn go_to_last(&mut self) {
+        let len = self.filtered_processes.len();
+        if len > 0 {
+            let last = len - 1;
+            self.state.select(Some(last));
+            self.scroll_state = self.scroll_state.position(last * ITEM_HEIGHT as usize);
+        }
+    }
+
     pub fn page_down(&mut self) {
         let len = self.filtered_processes.len();
         if len == 0 {
@@ -311,17 +327,14 @@ impl App {
     }
 
     fn handle_normal_mode_key(&mut self, key: KeyEvent) -> Result<AppControlFlow> {
-        let shift_pressed = key.modifiers.contains(KeyModifiers::SHIFT);
-
         match (key.modifiers, key.code) {
-            (_, KeyCode::Char('e')) => {
-                self.input_mode = InputMode::Editing;
-            }
+            // Quit from application
             (KeyModifiers::NONE, KeyCode::Char('q' | 'Q'))
             | (KeyModifiers::NONE, KeyCode::Esc)
             | (KeyModifiers::CONTROL, KeyCode::Char('c' | 'C')) => {
                 return Ok(AppControlFlow::Exit);
             }
+            // Toggle UI elements
             (KeyModifiers::CONTROL, KeyCode::Char('f' | 'F')) => {
                 self.is_searching = !self.is_searching;
                 self.clear_input();
@@ -330,13 +343,20 @@ impl App {
                     self.input_mode = InputMode::Editing;
                 }
             }
-            (_, KeyCode::Char('j') | KeyCode::Down) => self.next_row(),
-            (_, KeyCode::Char('k') | KeyCode::Up) => self.previous_row(),
-            (_, KeyCode::PageUp) => self.page_up(),
-            (_, KeyCode::PageDown) => self.page_down(),
-
-            (_, KeyCode::Char('l') | KeyCode::Right) if shift_pressed => self.next_color(),
-            (_, KeyCode::Char('h') | KeyCode::Left) if shift_pressed => {
+            // Modify Search input mode
+            (KeyModifiers::NONE, KeyCode::Char('e')) => {
+                self.input_mode = InputMode::Editing;
+            }
+            // Navigate in the list
+            (KeyModifiers::SHIFT, KeyCode::PageUp) => self.go_to_first(),
+            (KeyModifiers::SHIFT, KeyCode::PageDown) => self.go_to_last(),
+            (KeyModifiers::NONE, KeyCode::PageUp) => self.page_up(),
+            (KeyModifiers::NONE, KeyCode::PageDown) => self.page_down(),
+            (KeyModifiers::NONE, KeyCode::Char('j') | KeyCode::Down) => self.next_row(),
+            (KeyModifiers::NONE, KeyCode::Char('k') | KeyCode::Up) => self.previous_row(),
+            // Change theme
+            (KeyModifiers::SHIFT, KeyCode::Char('l') | KeyCode::Right) => self.next_color(),
+            (KeyModifiers::SHIFT, KeyCode::Char('h') | KeyCode::Left) => {
                 self.previous_color();
             }
             _ => {}
