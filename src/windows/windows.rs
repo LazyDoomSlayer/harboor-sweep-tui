@@ -1,22 +1,22 @@
 use windows::Win32::Foundation::NO_ERROR;
-use windows::Win32::NetworkManagement::IpHelper::{
-    GetExtendedTcpTable, GetExtendedUdpTable, TCP_TABLE_OWNER_PID_ALL, UDP_TABLE_OWNER_PID,
-    MIB_TCPTABLE_OWNER_PID, MIB_TCP6TABLE_OWNER_PID, MIB_UDPTABLE_OWNER_PID, MIB_UDP6TABLE_OWNER_PID
-};
-use windows::Win32::System::Threading::{OpenProcess, TerminateProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ};
 use windows::Win32::Foundation::{CloseHandle, ERROR_ACCESS_DENIED};
+use windows::Win32::NetworkManagement::IpHelper::{
+    GetExtendedTcpTable, GetExtendedUdpTable, MIB_TCP6TABLE_OWNER_PID, MIB_TCPTABLE_OWNER_PID,
+    MIB_UDP6TABLE_OWNER_PID, MIB_UDPTABLE_OWNER_PID, TCP_TABLE_OWNER_PID_ALL, UDP_TABLE_OWNER_PID,
+};
 use windows::Win32::System::Threading::PROCESS_TERMINATE;
+use windows::Win32::System::Threading::{
+    OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ, TerminateProcess,
+};
 
 use windows::Win32::System::ProcessStatus::{K32GetModuleBaseNameW, K32GetModuleFileNameExW};
 
-use std::ffi::OsString;
-use std::os::windows::ffi::OsStringExt;
 use std::collections::hash_map::DefaultHasher;
+use std::ffi::OsString;
 use std::hash::{Hash, Hasher};
+use std::os::windows::ffi::OsStringExt;
 
-
-use crate::common::{KillProcessResponse, PortInfo};
-
+use crate::common::{KillProcessResponse, PortInfo, ProcessPortState};
 
 const TCP_STATE_LISTEN: u32 = 2;
 
@@ -33,10 +33,23 @@ fn get_buffer_size(protocol: &Protocol) -> Option<u32> {
 
     unsafe {
         let result = match protocol {
-            Protocol::TcpIpv4 => GetExtendedTcpTable(None, &mut buffer_size, false, 2, TCP_TABLE_OWNER_PID_ALL, 0),
-            Protocol::TcpIpv6 => GetExtendedTcpTable(None, &mut buffer_size, false, 23, TCP_TABLE_OWNER_PID_ALL, 0),
-            Protocol::UdpIpv4 => GetExtendedUdpTable(None, &mut buffer_size, false, 2, UDP_TABLE_OWNER_PID, 0),
-            Protocol::UdpIpv6 => GetExtendedUdpTable(None, &mut buffer_size, false, 23, UDP_TABLE_OWNER_PID, 0),
+            Protocol::TcpIpv4 => {
+                GetExtendedTcpTable(None, &mut buffer_size, false, 2, TCP_TABLE_OWNER_PID_ALL, 0)
+            }
+            Protocol::TcpIpv6 => GetExtendedTcpTable(
+                None,
+                &mut buffer_size,
+                false,
+                23,
+                TCP_TABLE_OWNER_PID_ALL,
+                0,
+            ),
+            Protocol::UdpIpv4 => {
+                GetExtendedUdpTable(None, &mut buffer_size, false, 2, UDP_TABLE_OWNER_PID, 0)
+            }
+            Protocol::UdpIpv6 => {
+                GetExtendedUdpTable(None, &mut buffer_size, false, 23, UDP_TABLE_OWNER_PID, 0)
+            }
         };
 
         if result == 122 {
@@ -53,22 +66,52 @@ fn fetch_table(protocol: &Protocol, buffer_size: u32) -> Option<Vec<u8>> {
 
     unsafe {
         let result = match protocol {
-            Protocol::TcpIpv4 => GetExtendedTcpTable(Some(buffer.as_mut_ptr() as *mut _), &mut (buffer_size as u32), false, 2, TCP_TABLE_OWNER_PID_ALL, 0),
-            Protocol::TcpIpv6 => GetExtendedTcpTable(Some(buffer.as_mut_ptr() as *mut _), &mut (buffer_size as u32), false, 23, TCP_TABLE_OWNER_PID_ALL, 0),
-            Protocol::UdpIpv4 => GetExtendedUdpTable(Some(buffer.as_mut_ptr() as *mut _), &mut (buffer_size as u32), false, 2, UDP_TABLE_OWNER_PID, 0),
-            Protocol::UdpIpv6 => GetExtendedUdpTable(Some(buffer.as_mut_ptr() as *mut _), &mut (buffer_size as u32), false, 23, UDP_TABLE_OWNER_PID, 0),
+            Protocol::TcpIpv4 => GetExtendedTcpTable(
+                Some(buffer.as_mut_ptr() as *mut _),
+                &mut (buffer_size as u32),
+                false,
+                2,
+                TCP_TABLE_OWNER_PID_ALL,
+                0,
+            ),
+            Protocol::TcpIpv6 => GetExtendedTcpTable(
+                Some(buffer.as_mut_ptr() as *mut _),
+                &mut (buffer_size as u32),
+                false,
+                23,
+                TCP_TABLE_OWNER_PID_ALL,
+                0,
+            ),
+            Protocol::UdpIpv4 => GetExtendedUdpTable(
+                Some(buffer.as_mut_ptr() as *mut _),
+                &mut (buffer_size as u32),
+                false,
+                2,
+                UDP_TABLE_OWNER_PID,
+                0,
+            ),
+            Protocol::UdpIpv6 => GetExtendedUdpTable(
+                Some(buffer.as_mut_ptr() as *mut _),
+                &mut (buffer_size as u32),
+                false,
+                23,
+                UDP_TABLE_OWNER_PID,
+                0,
+            ),
         };
 
         if result == NO_ERROR.0 {
             // println!("Successfully retrieved the table for protocol: {:?}", protocol);
             Some(buffer)
         } else {
-            println!("Failed to retrieve table for protocol: {:?}. Error code: {}", protocol, result);
+            println!(
+                "Failed to retrieve table for protocol: {:?}. Error code: {}",
+                protocol, result
+            );
             None
         }
     }
 }
-
 
 fn generate_unique_id(pid: u32, port: u16) -> String {
     let mut hasher = DefaultHasher::new();
@@ -76,8 +119,6 @@ fn generate_unique_id(pid: u32, port: u16) -> String {
     port.hash(&mut hasher);
     format!("{:x}", hasher.finish())
 }
-
-
 
 fn parse_tcp_ipv4(buffer: &[u8]) -> Vec<PortInfo> {
     let mut results = Vec::new();
@@ -98,7 +139,11 @@ fn parse_tcp_ipv4(buffer: &[u8]) -> Vec<PortInfo> {
                 Some((process_name, process_path)) => (process_name, process_path),
                 None => (String::from("Unknown"), String::from("Unknown")),
             };
-
+            let port_state = if row.dwState == TCP_STATE_LISTEN {
+                ProcessPortState::Hosting
+            } else {
+                ProcessPortState::Using
+            };
 
             let port_info = PortInfo {
                 id,
@@ -106,20 +151,20 @@ fn parse_tcp_ipv4(buffer: &[u8]) -> Vec<PortInfo> {
                 process_name,
                 process_path,
                 pid: row.dwOwningPid,
-                is_listener: row.dwState == TCP_STATE_LISTEN,
+                port_state,
             };
 
-
-            if !results.iter().any(|entry: &PortInfo| entry.port == port && entry.pid == row.dwOwningPid) {
+            if !results
+                .iter()
+                .any(|entry: &PortInfo| entry.port == port && entry.pid == row.dwOwningPid)
+            {
                 results.push(port_info);
             }
-
         }
     }
 
     results
 }
-
 
 fn parse_tcp_ipv6(buffer: &[u8]) -> Vec<PortInfo> {
     let mut results = Vec::new();
@@ -132,7 +177,6 @@ fn parse_tcp_ipv6(buffer: &[u8]) -> Vec<PortInfo> {
         for i in 0..count {
             let row = &*rows.add(i as usize);
 
-
             let port = u16::from_be(row.dwLocalPort as u16);
 
             let id = generate_unique_id(row.dwOwningPid, port);
@@ -141,7 +185,11 @@ fn parse_tcp_ipv6(buffer: &[u8]) -> Vec<PortInfo> {
                 Some((process_name, process_path)) => (process_name, process_path),
                 None => (String::from("Unknown"), String::from("Unknown")),
             };
-
+            let port_state = if row.dwState == TCP_STATE_LISTEN {
+                ProcessPortState::Hosting
+            } else {
+                ProcessPortState::Using
+            };
 
             let port_info = PortInfo {
                 id,
@@ -149,21 +197,20 @@ fn parse_tcp_ipv6(buffer: &[u8]) -> Vec<PortInfo> {
                 process_name,
                 process_path,
                 pid: row.dwOwningPid,
-                is_listener: row.dwState == TCP_STATE_LISTEN,
+                port_state,
             };
 
-
-            if !results.iter().any(|entry: &PortInfo| entry.port == port && entry.pid == row.dwOwningPid) {
+            if !results
+                .iter()
+                .any(|entry: &PortInfo| entry.port == port && entry.pid == row.dwOwningPid)
+            {
                 results.push(port_info);
             }
-
         }
     }
 
     results
 }
-
-
 
 fn parse_udp_ipv4(buffer: &[u8]) -> Vec<PortInfo> {
     let mut results = Vec::new();
@@ -176,7 +223,6 @@ fn parse_udp_ipv4(buffer: &[u8]) -> Vec<PortInfo> {
         for i in 0..count {
             let row = &*rows.add(i as usize);
 
-
             let port = u16::from_be(row.dwLocalPort as u16);
 
             let id = generate_unique_id(row.dwOwningPid, port);
@@ -192,21 +238,20 @@ fn parse_udp_ipv4(buffer: &[u8]) -> Vec<PortInfo> {
                 process_name,
                 process_path,
                 pid: row.dwOwningPid,
-                is_listener: false,
+                port_state: ProcessPortState::Using,
             };
 
-
-            if !results.iter().any(|entry: &PortInfo| entry.port == port && entry.pid == row.dwOwningPid) {
+            if !results
+                .iter()
+                .any(|entry: &PortInfo| entry.port == port && entry.pid == row.dwOwningPid)
+            {
                 results.push(port_info);
             }
-
         }
     }
 
     results
 }
-
-
 
 fn parse_udp_ipv6(buffer: &[u8]) -> Vec<PortInfo> {
     let mut results = Vec::new();
@@ -234,12 +279,13 @@ fn parse_udp_ipv6(buffer: &[u8]) -> Vec<PortInfo> {
                 process_name,
                 process_path,
                 pid: row.dwOwningPid,
-                is_listener: false,
+                port_state: ProcessPortState::Using,
             };
 
-
-
-            if !results.iter().any(|entry: &PortInfo| entry.port == port && entry.pid == row.dwOwningPid) {
+            if !results
+                .iter()
+                .any(|entry: &PortInfo| entry.port == port && entry.pid == row.dwOwningPid)
+            {
                 results.push(port_info);
             }
         }
@@ -247,7 +293,6 @@ fn parse_udp_ipv6(buffer: &[u8]) -> Vec<PortInfo> {
 
     results
 }
-
 
 pub fn fetch_ports() -> Result<Vec<crate::common::PortInfo>, String> {
     let protocols = [
@@ -296,9 +341,6 @@ pub fn fetch_ports() -> Result<Vec<crate::common::PortInfo>, String> {
     Ok(all_connections)
 }
 
-
-
-
 pub fn kill_process(pid: u32) -> KillProcessResponse {
     unsafe {
         match OpenProcess(PROCESS_TERMINATE, false, pid) {
@@ -319,7 +361,10 @@ pub fn kill_process(pid: u32) -> KillProcessResponse {
                         };
                         KillProcessResponse {
                             success: false,
-                            message: format!("Failed to terminate process with PID {}: {}", pid, message),
+                            message: format!(
+                                "Failed to terminate process with PID {}: {}",
+                                pid, message
+                            ),
                         }
                     }
                 }
@@ -328,31 +373,23 @@ pub fn kill_process(pid: u32) -> KillProcessResponse {
                 success: false,
                 message: format!(
                     "Failed to open process with PID {}: {}",
-                    pid, error.message()
+                    pid,
+                    error.message()
                 ),
             },
         }
     }
 }
 
-
-
 pub fn get_process_info(pid: u32) -> Option<(String, String)> {
     unsafe {
-        let process_handle = OpenProcess(
-            PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,
-            false,
-            pid,
-        ).ok()?;
+        let process_handle =
+            OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, pid).ok()?;
 
         let mut name_buffer = vec![0u16; 256];
         let mut path_buffer = vec![0u16; 1024];
 
-        let name_len = K32GetModuleBaseNameW(
-            Some(process_handle)?,
-            None,
-            &mut name_buffer,
-        );
+        let name_len = K32GetModuleBaseNameW(Some(process_handle)?, None, &mut name_buffer);
 
         let process_name = if name_len > 0 {
             OsString::from_wide(&name_buffer[..name_len as usize])
@@ -362,11 +399,7 @@ pub fn get_process_info(pid: u32) -> Option<(String, String)> {
             String::new()
         };
 
-        let path_len = K32GetModuleFileNameExW(
-            Some(process_handle),
-            None,
-            &mut path_buffer,
-        );
+        let path_len = K32GetModuleFileNameExW(Some(process_handle), None, &mut path_buffer);
 
         let process_path = if path_len > 0 {
             OsString::from_wide(&path_buffer[..path_len as usize])
