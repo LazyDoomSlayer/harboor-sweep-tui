@@ -294,12 +294,11 @@ impl App {
             }
             (KeyModifiers::CONTROL, KeyCode::Char('f' | 'F')) => {
                 self.is_searching = !self.is_searching;
-                self.port_process_user_input = String::new();
+                self.clear_input();
 
                 if self.is_searching {
                     self.input_mode = InputMode::Editing;
                 }
-                self.update_filtered_processes();
             }
             (_, KeyCode::Char('j') | KeyCode::Down) => self.next_row(),
             (_, KeyCode::Char('k') | KeyCode::Up) => self.previous_row(),
@@ -330,13 +329,11 @@ impl App {
                 self.input_mode = InputMode::Normal;
                 self.is_searching = !self.is_searching;
 
-                self.port_process_user_input = String::new();
+                self.clear_input();
 
                 if self.is_searching {
                     self.input_mode = InputMode::Editing;
                 }
-
-                self.update_filtered_processes();
             }
             _ => {}
         }
@@ -520,6 +517,12 @@ impl App {
         let processes_widget =
             List::new(processes_listed).block(Block::bordered().title("Processes"));
         frame.render_widget(processes_widget, area);
+    }
+
+    fn clear_input(&mut self) {
+        self.port_process_user_input.clear();
+        self.port_process_user_input_character_index = 0;
+        self.update_filtered_processes();
     }
 
     fn clamp_cursor(&self, new_cursor_pos: usize) -> usize {
