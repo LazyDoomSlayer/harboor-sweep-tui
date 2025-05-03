@@ -23,6 +23,7 @@ use ratatui::{
 };
 
 use std::{sync::mpsc, thread, time};
+use unicode_width::UnicodeWidthStr;
 
 const PALETTES: [tailwind::Palette; 5] = [
     tailwind::GRAY,
@@ -84,6 +85,25 @@ fn main() -> color_eyre::Result<()> {
     result
 }
 
+#[derive(Debug)]
+struct Keybinding {
+    combo: String,
+    description: String,
+    divider: Option<String>,
+}
+impl Keybinding {
+    pub fn ref_array(&self) -> Vec<String> {
+        vec![self.combo.to_string(), self.description.to_string()]
+    }
+
+    fn combo(&self) -> &str {
+        &self.combo
+    }
+    fn description(&self) -> &str {
+        &self.description
+    }
+}
+
 /// The main application which holds the state and logic of the application.
 #[derive(Debug, Default)]
 pub struct App {
@@ -94,11 +114,12 @@ pub struct App {
     processes_search_input_index: usize,
     processes_search_display: bool,
     // Help Widget
+    keybindings: Vec<Keybinding>,
     keybindings_display: bool,
     keybindings_table_state: TableState,
     keybindings_table_scroll_state: ScrollbarState,
     keybindings_table_visible_rows: usize,
-
+    keybindings_table_longest_item_lens: (u16, u16),
     // processes
     processes: Vec<PortInfo>,
     processes_filtered: Vec<PortInfo>,
@@ -194,7 +215,14 @@ impl App {
             application_mode: ApplicationMode::Normal,
             processes_search_display: false,
             // Help Widget
+            keybindings: Self::init_keybindings(),
             keybindings_display: false,
+            keybindings_table_state: TableState::default(),
+            keybindings_table_scroll_state: ScrollbarState::new((1 * ITEM_HEIGHT) as usize),
+            keybindings_table_visible_rows: 0,
+            keybindings_table_longest_item_lens: keybindings_constraint_len_calculator(
+                &*Self::init_keybindings(),
+            ),
             // Processes
             processes: Vec::new(),
             processes_filtered: Vec::new(),
@@ -207,9 +235,73 @@ impl App {
             processes_table_visible_rows: 0,
         }
     }
+    fn init_keybindings() -> Vec<Keybinding> {
+        vec![
+            Keybinding {
+                combo: "Esc / q / Ctrl+C".into(),
+                description: "Quit the application".into(),
+                divider: None,
+            },
+            Keybinding {
+                combo: "Ctrl+F".into(),
+                description: "Toggle the search input".into(),
+                divider: None,
+            },
+            Keybinding {
+                combo: "F1 / ?".into(),
+                description: "Show or hide this help dialog".into(),
+                divider: None,
+            },
+            Keybinding {
+                combo: "j / ↓".into(),
+                description: "Move selection down".into(),
+                divider: None,
+            },
+            Keybinding {
+                combo: "k / ↑".into(),
+                description: "Move selection up".into(),
+                divider: None,
+            },
+            Keybinding {
+                combo: "PageDown".into(),
+                description: "Page down".into(),
+                divider: None,
+            },
+            Keybinding {
+                combo: "PageUp".into(),
+                description: "Page up".into(),
+                divider: None,
+            },
+            Keybinding {
+                combo: "Shift+PageDown".into(),
+                description: "Jump to last item".into(),
+                divider: None,
+            },
+            Keybinding {
+                combo: "Shift+PageUp".into(),
+                description: "Jump to first item".into(),
+                divider: None,
+            },
+            Keybinding {
+                combo: "Shift+Right / l".into(),
+                description: "Next color theme".into(),
+                divider: None,
+            },
+            Keybinding {
+                combo: "Shift+Left / h".into(),
+                description: "Previous color theme".into(),
+                divider: None,
+            },
+            Keybinding {
+                combo: "e".into(),
+                description: "Enter editing mode".into(),
+                divider: None,
+            },
+        ]
+    }
 
     /// Table list
-    pub fn next_row(&mut self) {
+    pub fn processes_table_next_row(&mut self) {
         let i = match self.processes_table_state.selected() {
             Some(i) => {
                 if i >= self.processes_filtered.len() - 1 {
@@ -225,8 +317,7 @@ impl App {
             .processes_table_scroll_state
             .position(i * ITEM_HEIGHT as usize);
     }
-
-    pub fn previous_row(&mut self) {
+    pub fn processes_table_previous_row(&mut self) {
         let i = match self.processes_table_state.selected() {
             Some(i) => {
                 if i == 0 {
@@ -242,15 +333,13 @@ impl App {
             .processes_table_scroll_state
             .position(i * ITEM_HEIGHT as usize);
     }
-
-    pub fn go_to_first(&mut self) {
+    pub fn processes_table_go_to_first(&mut self) {
         if !self.processes_filtered.is_empty() {
             self.processes_table_state.select(Some(0));
             self.processes_table_scroll_state = self.processes_table_scroll_state.position(0);
         }
     }
-
-    pub fn go_to_last(&mut self) {
+    pub fn processes_table_go_to_last(&mut self) {
         let len = self.processes_filtered.len();
         if len > 0 {
             let last = len - 1;
@@ -260,8 +349,7 @@ impl App {
                 .position(last * ITEM_HEIGHT as usize);
         }
     }
-
-    pub fn page_down(&mut self) {
+    pub fn processes_table_page_down(&mut self) {
         let len = self.processes_filtered.len();
         if len == 0 {
             return;
@@ -276,8 +364,7 @@ impl App {
             .processes_table_scroll_state
             .position(new * ITEM_HEIGHT as usize);
     }
-
-    pub fn page_up(&mut self) {
+    pub fn processes_table_page_up(&mut self) {
         let len = self.processes_filtered.len();
         if len == 0 {
             return;
@@ -293,6 +380,85 @@ impl App {
             .position(new * ITEM_HEIGHT as usize);
     }
 
+    // keybindings
+    pub fn keybindings_table_next_row(&mut self) {
+        let i = match self.keybindings_table_state.selected() {
+            Some(i) => {
+                if i >= self.keybindings.len() - 1 {
+                    0
+                } else {
+                    i + 1
+                }
+            }
+            None => 0,
+        };
+        self.keybindings_table_state.select(Some(i));
+        self.keybindings_table_scroll_state = self
+            .keybindings_table_scroll_state
+            .position(i * ITEM_HEIGHT as usize);
+    }
+    pub fn keybindings_table_previous_row(&mut self) {
+        let i = match self.keybindings_table_state.selected() {
+            Some(i) => {
+                if i == 0 {
+                    self.keybindings.len() - 1
+                } else {
+                    i - 1
+                }
+            }
+            None => 0,
+        };
+        self.keybindings_table_state.select(Some(i));
+        self.keybindings_table_scroll_state = self
+            .keybindings_table_scroll_state
+            .position(i * ITEM_HEIGHT as usize);
+    }
+    pub fn keybindings_table_go_to_first(&mut self) {
+        if !self.keybindings.is_empty() {
+            self.keybindings_table_state.select(Some(0));
+            self.keybindings_table_scroll_state = self.keybindings_table_scroll_state.position(0);
+        }
+    }
+    pub fn keybindings_table_go_to_last(&mut self) {
+        let len = self.keybindings.len();
+        if len > 0 {
+            let last = len - 1;
+            self.keybindings_table_state.select(Some(last));
+            self.keybindings_table_scroll_state = self
+                .keybindings_table_scroll_state
+                .position(last * ITEM_HEIGHT as usize);
+        }
+    }
+    pub fn keybindings_table_page_down(&mut self) {
+        let len = self.keybindings.len();
+        if len == 0 {
+            return;
+        }
+
+        let current = self.keybindings_table_state.selected().unwrap_or(0);
+        // move down by one screenful, clamped to last row
+        let new = (current + self.processes_table_visible_rows).min(len - 1);
+
+        self.keybindings_table_state.select(Some(new));
+        self.keybindings_table_scroll_state = self
+            .keybindings_table_scroll_state
+            .position(new * ITEM_HEIGHT as usize);
+    }
+    pub fn keybindings_table_page_up(&mut self) {
+        let len = self.keybindings.len();
+        if len == 0 {
+            return;
+        }
+
+        let current = self.keybindings_table_state.selected().unwrap_or(0);
+        // move up by one screenful, clamped at zero
+        let new = current.saturating_sub(self.processes_table_visible_rows);
+
+        self.keybindings_table_state.select(Some(new));
+        self.keybindings_table_scroll_state = self
+            .keybindings_table_scroll_state
+            .position(new * ITEM_HEIGHT as usize);
+    }
     pub fn next_color(&mut self) {
         self.processes_table_color_index = (self.processes_table_color_index + 1) % PALETTES.len();
     }
@@ -388,12 +554,16 @@ impl App {
                 self.application_mode = ApplicationMode::Editing;
             }
             // Navigate in the list
-            (KeyModifiers::SHIFT, KeyCode::PageUp) => self.go_to_first(),
-            (KeyModifiers::SHIFT, KeyCode::PageDown) => self.go_to_last(),
-            (KeyModifiers::NONE, KeyCode::PageUp) => self.page_up(),
-            (KeyModifiers::NONE, KeyCode::PageDown) => self.page_down(),
-            (KeyModifiers::NONE, KeyCode::Char('j') | KeyCode::Down) => self.next_row(),
-            (KeyModifiers::NONE, KeyCode::Char('k') | KeyCode::Up) => self.previous_row(),
+            (KeyModifiers::SHIFT, KeyCode::PageUp) => self.processes_table_go_to_first(),
+            (KeyModifiers::SHIFT, KeyCode::PageDown) => self.processes_table_go_to_last(),
+            (KeyModifiers::NONE, KeyCode::PageUp) => self.processes_table_page_up(),
+            (KeyModifiers::NONE, KeyCode::PageDown) => self.processes_table_page_down(),
+            (KeyModifiers::NONE, KeyCode::Char('j') | KeyCode::Down) => {
+                self.processes_table_next_row()
+            }
+            (KeyModifiers::NONE, KeyCode::Char('k') | KeyCode::Up) => {
+                self.processes_table_previous_row()
+            }
             // Change theme
             (KeyModifiers::SHIFT, KeyCode::Char('l') | KeyCode::Right) => self.next_color(),
             (KeyModifiers::SHIFT, KeyCode::Char('h') | KeyCode::Left) => {
@@ -405,14 +575,25 @@ impl App {
     }
 
     fn handle_helping_mode_key(&mut self, key: KeyEvent) {
-        match key.code {
-            KeyCode::Esc => {
+        match (key.modifiers, key.code) {
+            (KeyModifiers::NONE, KeyCode::Esc) => {
                 self.keybindings_display = !self.keybindings_display;
                 if (self.keybindings_display) {
                     self.application_mode = ApplicationMode::Helping;
                 } else {
                     self.application_mode = ApplicationMode::Normal;
                 }
+            }
+            // Navigate in the list
+            (KeyModifiers::SHIFT, KeyCode::PageUp) => self.keybindings_table_go_to_first(),
+            (KeyModifiers::SHIFT, KeyCode::PageDown) => self.keybindings_table_go_to_last(),
+            (KeyModifiers::NONE, KeyCode::PageUp) => self.keybindings_table_page_up(),
+            (KeyModifiers::NONE, KeyCode::PageDown) => self.keybindings_table_page_down(),
+            (KeyModifiers::NONE, KeyCode::Char('j') | KeyCode::Down) => {
+                self.keybindings_table_next_row()
+            }
+            (KeyModifiers::NONE, KeyCode::Char('k') | KeyCode::Up) => {
+                self.keybindings_table_previous_row()
             }
             _ => {}
         }
@@ -425,11 +606,11 @@ impl App {
             KeyCode::Right => self.move_cursor_right(),
             KeyCode::Down => {
                 self.application_mode = ApplicationMode::Normal;
-                self.next_row()
+                self.processes_table_next_row()
             }
             KeyCode::Up => {
                 self.application_mode = ApplicationMode::Normal;
-                self.previous_row()
+                self.processes_table_previous_row()
             }
             KeyCode::Esc => {
                 self.application_mode = ApplicationMode::Normal;
@@ -484,13 +665,70 @@ impl App {
 
     fn render_help_popup(&mut self, frame: &mut Frame, area: Rect) {
         if self.keybindings_display {
-            let block = Block::bordered()
-                .border_type(BorderType::Plain)
-                .border_style(Style::new().fg(self.processes_table_colors.footer_border_color))
-                .title("Keybindings");
-            let area = self.popup_area(area, 60, 20);
+            let selected_row_style = Style::default()
+                .add_modifier(Modifier::REVERSED)
+                .fg(self.processes_table_colors.selected_row_style_fg);
+            let selected_cell_style = Style::default()
+                .add_modifier(Modifier::REVERSED)
+                .fg(self.processes_table_colors.selected_cell_style_fg);
+
+            let combo_style = Style::new()
+                .fg(self.processes_table_colors.selected_row_style_fg)
+                .bg(self.processes_table_colors.buffer_bg);
+            let desc_style = Style::new()
+                .fg(self.processes_table_colors.row_fg)
+                .bg(self.processes_table_colors.buffer_bg);
+
+            let rows = self.keybindings.iter().map(|kb| {
+                // build each row by styling its cells individually
+                let cells = kb
+                    .ref_array()
+                    .into_iter()
+                    .enumerate()
+                    .map(|(col_idx, content)| {
+                        let cell = Cell::from(Text::from(content));
+                        if col_idx == 0 {
+                            cell.style(combo_style)
+                        } else {
+                            cell.style(desc_style)
+                        }
+                    });
+                Row::new(cells).height(ITEM_HEIGHT)
+            });
+
+            let table = Table::new(
+                rows,
+                [
+                    Constraint::Length(self.keybindings_table_longest_item_lens.0),
+                    Constraint::Min(self.keybindings_table_longest_item_lens.1),
+                ],
+            )
+            .row_highlight_style(selected_row_style)
+            .cell_highlight_style(selected_cell_style)
+            .bg(self.processes_table_colors.buffer_bg)
+            .highlight_spacing(HighlightSpacing::Always)
+            .block(
+                Block::bordered()
+                    .border_type(BorderType::Plain)
+                    .border_style(Style::new().fg(self.processes_table_colors.footer_border_color))
+                    .title("Keybindings"),
+            );
+
+            let area = self.popup_area(area, 60, 40);
             frame.render_widget(Clear, area);
-            frame.render_widget(block, area);
+            frame.render_stateful_widget(table, area, &mut self.keybindings_table_state);
+
+            frame.render_stateful_widget(
+                Scrollbar::default()
+                    .orientation(ScrollbarOrientation::VerticalRight)
+                    .begin_symbol(None)
+                    .end_symbol(None),
+                area.inner(Margin {
+                    vertical: 1,
+                    horizontal: 1,
+                }),
+                &mut self.keybindings_table_scroll_state,
+            );
         }
     }
 
@@ -773,4 +1011,23 @@ impl App {
             });
         }
     }
+}
+
+fn keybindings_constraint_len_calculator(items: &[Keybinding]) -> (u16, u16) {
+    let combo = items
+        .iter()
+        .map(Keybinding::combo)
+        .map(UnicodeWidthStr::width)
+        .max()
+        .unwrap_or(0);
+    let description = items
+        .iter()
+        .map(Keybinding::description)
+        .flat_map(str::lines)
+        .map(UnicodeWidthStr::width)
+        .max()
+        .unwrap_or(0);
+
+    #[allow(clippy::cast_possible_truncation)]
+    (combo as u16, description as u16)
 }
