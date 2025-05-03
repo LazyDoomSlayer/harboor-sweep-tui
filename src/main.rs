@@ -104,6 +104,7 @@ pub struct App {
     longest_item_lens: (u16, u16, u16, u16, u16),
     colors: TableColors,
     color_index: usize,
+    visible_rows: usize,
 }
 
 enum MultithreadingEvent {
@@ -186,6 +187,7 @@ impl App {
             longest_item_lens: (5, 5, 30, 55, 5),
             colors: TableColors::new(&PALETTES[0]),
             color_index: 0,
+            visible_rows: 0,
         }
     }
 
@@ -218,6 +220,34 @@ impl App {
         };
         self.state.select(Some(i));
         self.scroll_state = self.scroll_state.position(i * ITEM_HEIGHT as usize);
+    }
+
+    pub fn page_down(&mut self) {
+        let len = self.filtered_processes.len();
+        if len == 0 {
+            return;
+        }
+
+        let current = self.state.selected().unwrap_or(0);
+        // move down by one screenful, clamped to last row
+        let new = (current + self.visible_rows).min(len - 1);
+
+        self.state.select(Some(new));
+        self.scroll_state = self.scroll_state.position(new * ITEM_HEIGHT as usize);
+    }
+
+    pub fn page_up(&mut self) {
+        let len = self.filtered_processes.len();
+        if len == 0 {
+            return;
+        }
+
+        let current = self.state.selected().unwrap_or(0);
+        // move up by one screenful, clamped at zero
+        let new = current.saturating_sub(self.visible_rows);
+
+        self.state.select(Some(new));
+        self.scroll_state = self.scroll_state.position(new * ITEM_HEIGHT as usize);
     }
 
     pub fn next_color(&mut self) {
@@ -302,6 +332,9 @@ impl App {
             }
             (_, KeyCode::Char('j') | KeyCode::Down) => self.next_row(),
             (_, KeyCode::Char('k') | KeyCode::Up) => self.previous_row(),
+            (_, KeyCode::PageUp) => self.page_up(),
+            (_, KeyCode::PageDown) => self.page_down(),
+
             (_, KeyCode::Char('l') | KeyCode::Right) if shift_pressed => self.next_color(),
             (_, KeyCode::Char('h') | KeyCode::Left) if shift_pressed => {
                 self.previous_color();
@@ -349,26 +382,19 @@ impl App {
         self.set_colors();
 
         if !self.is_searching {
-            // ——— SEARCHING: no input area ———
-            let [table_area, footer_area] =
-                Layout::vertical([Constraint::Min(1), Constraint::Length(3)]).areas(frame.area());
-
+            let [table_area] = Layout::vertical([Constraint::Min(1)]).areas(frame.area());
+            self.visible_rows = table_area.height as usize - 1;
             self.render_table(frame, table_area);
             self.render_scrollbar(frame, table_area);
-            self.render_footer(frame, footer_area);
         } else {
-            // ——— NOT SEARCHING: show input + table + footer ———
-            let [input_area, table_area, footer_area] = Layout::vertical([
-                Constraint::Length(3),
-                Constraint::Min(1),
-                Constraint::Length(3),
-            ])
-            .areas(frame.area());
+            let [input_area, table_area] =
+                Layout::vertical([Constraint::Length(3), Constraint::Min(1)]).areas(frame.area());
+
+            self.visible_rows = table_area.height as usize - 1;
 
             self.render_search(frame, input_area);
             self.render_table(frame, table_area);
             self.render_scrollbar(frame, table_area);
-            self.render_footer(frame, footer_area);
         }
     }
 
@@ -453,12 +479,14 @@ impl App {
         .row_highlight_style(selected_row_style)
         .cell_highlight_style(selected_cell_style)
         .bg(self.colors.buffer_bg)
-        .block(
-            Block::bordered()
-                .border_type(BorderType::Plain)
-                .border_style(Style::new().fg(self.colors.footer_border_color)),
-        )
         .highlight_spacing(HighlightSpacing::Always);
+
+        // .block(
+        //     Block::bordered()
+        //         .border_type(BorderType::Plain)
+        //         .border_style(Style::new().fg(self.colors.footer_border_color)),
+        // )
+
         frame.render_stateful_widget(t, area, &mut self.state);
     }
 
