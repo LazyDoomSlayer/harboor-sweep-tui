@@ -11,7 +11,7 @@ use color_eyre::Result;
 
 use ratatui::{
     DefaultTerminal, Frame,
-    crossterm::event::{self, Event as OtherEvent, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
+    crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     layout::{Constraint, Layout, Margin, Position, Rect},
     prelude::{Color, Style},
     style::{self, Modifier, Stylize, palette::tailwind},
@@ -34,7 +34,6 @@ const PALETTES: [tailwind::Palette; 5] = [
 ];
 const INFO_TEXT: [&str; 1] =
     ["(Esc) quit | (↑) move up | (↓) move down | (←) move left | (→) move right"];
-// "(Shift + →) next color | (Shift + ←) previous color",
 
 const ITEM_HEIGHT: u16 = 1;
 
@@ -45,7 +44,6 @@ struct TableColors {
     header_fg: Color,
     row_fg: Color,
     selected_row_style_fg: Color,
-    selected_column_style_fg: Color,
     selected_cell_style_fg: Color,
     normal_row_color: Color,
     alt_row_color: Color,
@@ -60,7 +58,6 @@ impl TableColors {
             header_fg: tailwind::SLATE.c200,
             row_fg: tailwind::SLATE.c200,
             selected_row_style_fg: color.c400,
-            selected_column_style_fg: color.c400,
             selected_cell_style_fg: color.c600,
             normal_row_color: tailwind::SLATE.c950,
             alt_row_color: tailwind::SLATE.c900,
@@ -72,7 +69,7 @@ impl TableColors {
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
 
-    let (event_tx, event_rx) = std::sync::mpsc::channel::<Event>();
+    let (event_tx, event_rx) = std::sync::mpsc::channel::<MultithreadingEvent>();
     let tx_to_input_events = event_tx.clone();
     std::thread::spawn(move || {
         handle_input_events(tx_to_input_events);
@@ -91,7 +88,6 @@ fn main() -> color_eyre::Result<()> {
 /// The main application which holds the state and logic of the application.
 #[derive(Debug, Default)]
 pub struct App {
-    /// Is the application running?
     input_mode: InputMode,
     port_process_user_input: String,
     port_process_user_input_character_index: usize,
@@ -99,39 +95,36 @@ pub struct App {
 
     // processes
     processes: Vec<PortInfo>,
-    monitoring_interval_ms: u64,
+    filtered_processes: Vec<PortInfo>,
     is_monitoring: bool,
 
     // Table list
     state: TableState,
     scroll_state: ScrollbarState,
-    longest_item_lens: (u16, u16, u16, u16, u16), // order is (port pid process_name process_path port_state)
+    longest_item_lens: (u16, u16, u16, u16, u16),
     colors: TableColors,
     color_index: usize,
 }
 
-enum Event {
-    Input(crossterm::event::KeyEvent),
+enum MultithreadingEvent {
+    Crossterm(Event),
     ProccesesUpdate(Vec<PortInfo>),
 }
 
-fn handle_input_events(tx: mpsc::Sender<Event>) {
+fn handle_input_events(tx: mpsc::Sender<MultithreadingEvent>) {
     loop {
-        match crossterm::event::read().unwrap() {
-            crossterm::event::Event::Key(key_event) => {
-                let event = Event::Input(key_event);
-                tx.send(event).unwrap();
-            }
-            _ => {}
-        }
+        let evt = event::read().expect("failed reading crossterm event");
+        tx.send(MultithreadingEvent::Crossterm(evt))
+            .expect("failed to send input event");
     }
 }
-fn run_background_thread(tx: mpsc::Sender<Event>) {
+
+fn run_background_thread(tx: mpsc::Sender<MultithreadingEvent>) {
     loop {
-        let event = Event::ProccesesUpdate(Vec::new());
+        let event = MultithreadingEvent::ProccesesUpdate(Vec::new());
         tx.send(event).unwrap();
 
-        std::thread::sleep(std::time::Duration::from_millis(1000));
+        std::thread::sleep(std::time::Duration::from_millis(2_000));
     }
 }
 
@@ -185,7 +178,7 @@ impl App {
             is_searching: false,
             // Processes
             processes: Vec::new(),
-            monitoring_interval_ms: 2_000,
+            filtered_processes: Vec::new(),
             is_monitoring: false,
             // Table list
             state: TableState::default(),
@@ -200,7 +193,7 @@ impl App {
     pub fn next_row(&mut self) {
         let i = match self.state.selected() {
             Some(i) => {
-                if i >= self.processes.len() - 1 {
+                if i >= self.filtered_processes.len() - 1 {
                     0
                 } else {
                     i + 1
@@ -216,7 +209,7 @@ impl App {
         let i = match self.state.selected() {
             Some(i) => {
                 if i == 0 {
-                    self.processes.len() - 1
+                    self.filtered_processes.len() - 1
                 } else {
                     i - 1
                 }
@@ -225,14 +218,6 @@ impl App {
         };
         self.state.select(Some(i));
         self.scroll_state = self.scroll_state.position(i * ITEM_HEIGHT as usize);
-    }
-
-    pub fn next_column(&mut self) {
-        self.state.select_next_column();
-    }
-
-    pub fn previous_column(&mut self) {
-        self.state.select_previous_column();
     }
 
     pub fn next_color(&mut self) {
@@ -248,29 +233,41 @@ impl App {
     }
 
     /// Run the application's main loop.
-    fn run(mut self, mut terminal: DefaultTerminal, rx: mpsc::Receiver<Event>) -> Result<()> {
-        // self.start_monitoring().expect("TODO: panic message");
-
+    fn run(
+        mut self,
+        mut terminal: DefaultTerminal,
+        rx: mpsc::Receiver<MultithreadingEvent>,
+    ) -> Result<()> {
         loop {
             match rx.recv().unwrap() {
-                Event::Input(key_event) => {
-                    self.handle_key_event(key_event)?;
-                }
-                Event::ProccesesUpdate(_data) => {
-                    // Todo
-                    println!("Hello there");
-                }
+                MultithreadingEvent::Crossterm(event) => match event {
+                    Event::Key(key) if key.kind == KeyEventKind::Press => {
+                        if matches!(self.handle_key_event(key)?, AppControlFlow::Exit) {
+                            return Ok(());
+                        }
+                    }
+                    _ => {}
+                },
+                MultithreadingEvent::ProccesesUpdate(_data) => self.monitor_ports_loop(),
             }
+
             terminal.draw(|frame| self.render(frame))?;
-            // match event::read()? {
-            //     Event::Key(key) if key.kind == KeyEventKind::Press => {
-            //         if matches!(self.handle_key_event(key)?, AppControlFlow::Exit) {
-            //             return Ok(());
-            //         }
-            //     }
-            //     _ => {}
-            // }
         }
+    }
+
+    fn update_filtered_processes(&mut self) {
+        let q = self.port_process_user_input.to_lowercase();
+        self.filtered_processes = self
+            .processes
+            .iter()
+            .filter(|p| {
+                // match pid
+                p.pid.to_string().contains(&q)
+                    || p.port.to_string().contains(&q)
+                    || p.process_name.to_lowercase().contains(&q)
+            })
+            .cloned()
+            .collect();
     }
 
     fn handle_key_event(&mut self, key: KeyEvent) -> Result<AppControlFlow> {
@@ -297,12 +294,12 @@ impl App {
             }
             (KeyModifiers::CONTROL, KeyCode::Char('f' | 'F')) => {
                 self.is_searching = !self.is_searching;
+                self.port_process_user_input = String::new();
 
                 if self.is_searching {
                     self.input_mode = InputMode::Editing;
-                } else {
-                    self.port_process_user_input = String::new();
                 }
+                self.update_filtered_processes();
             }
             (_, KeyCode::Char('j') | KeyCode::Down) => self.next_row(),
             (_, KeyCode::Char('k') | KeyCode::Up) => self.previous_row(),
@@ -310,8 +307,6 @@ impl App {
             (_, KeyCode::Char('h') | KeyCode::Left) if shift_pressed => {
                 self.previous_color();
             }
-            // (_, KeyCode::Char('l') | KeyCode::Right) => self.next_column(),
-            // (_, KeyCode::Char('h') | KeyCode::Left) => self.previous_column(),
             _ => {}
         }
         Ok(AppControlFlow::Continue)
@@ -334,6 +329,14 @@ impl App {
             KeyCode::Esc => {
                 self.input_mode = InputMode::Normal;
                 self.is_searching = !self.is_searching;
+
+                self.port_process_user_input = String::new();
+
+                if self.is_searching {
+                    self.input_mode = InputMode::Editing;
+                }
+
+                self.update_filtered_processes();
             }
             _ => {}
         }
@@ -415,7 +418,6 @@ impl App {
         let selected_row_style = Style::default()
             .add_modifier(Modifier::REVERSED)
             .fg(self.colors.selected_row_style_fg);
-        let selected_col_style = Style::default().fg(self.colors.selected_column_style_fg);
         let selected_cell_style = Style::default()
             .add_modifier(Modifier::REVERSED)
             .fg(self.colors.selected_cell_style_fg);
@@ -427,7 +429,7 @@ impl App {
             .style(header_style)
             .height(1);
 
-        let rows = self.processes.iter().enumerate().map(|(i, data)| {
+        let rows = self.filtered_processes.iter().enumerate().map(|(i, data)| {
             let color = match i % 2 {
                 0 => self.colors.normal_row_color,
                 _ => self.colors.alt_row_color,
@@ -452,7 +454,6 @@ impl App {
         )
         .header(header)
         .row_highlight_style(selected_row_style)
-        .column_highlight_style(selected_col_style)
         .cell_highlight_style(selected_cell_style)
         .bg(self.colors.buffer_bg)
         .block(
@@ -549,6 +550,7 @@ impl App {
         let index = self.byte_index();
         self.port_process_user_input.insert(index, new_char);
         self.move_cursor_right();
+        self.update_filtered_processes();
     }
     fn delete_char(&mut self) {
         let is_not_cursor_leftmost = self.port_process_user_input_character_index != 0;
@@ -573,47 +575,23 @@ impl App {
             self.port_process_user_input =
                 before_char_to_delete.chain(after_char_to_delete).collect();
             self.move_cursor_left();
+            self.update_filtered_processes();
         }
     }
 
-    // Processes
-    // pub fn set_interval(&self, interval: u64) {
-    //     *self.interval.lock().unwrap() = interval;
-    // }
-
-    // pub fn is_monitoring(&self) -> bool {
-    //     *self.is_monitoring.lock().unwrap()
-    // }
-
-    // pub fn set_monitoring(&self, state: bool) {
-    //     *self.is_monitoring.lock().unwrap() = state;
-    // }
-
-    // fn start_monitoring(&mut self) -> Result<(), String> {
-    //     // if self.is_monitoring {
-    //     //     return Err("Monitoring is already running".into());
-    //     // }
-    //
-    //     self.set_monitoring(true);
-    //
-    //     self.monitor_ports_loop();
-    //     Ok(())
-    // }
-
-    // fn monitor_ports_loop(&mut self) {
-    //     match self.fetch_ports_by_os() {
-    //         Ok(ports) => {
-    //             // update vtor
-    //             self.processes = ports;
-    //             println!("{:?}", self.processes.len());
-    //             self.scroll_state =
-    //                 ScrollbarState::new(self.processes.len() * ITEM_HEIGHT as usize);
-    //         }
-    //         Err(e) => {
-    //             eprintln!("Error fetching ports: {}", e);
-    //         }
-    //     }
-    // }
+    fn monitor_ports_loop(&mut self) {
+        match self.fetch_ports_by_os() {
+            Ok(ports) => {
+                self.processes = ports;
+                self.update_filtered_processes();
+                let length = self.filtered_processes.len() * ITEM_HEIGHT as usize;
+                self.scroll_state = self.scroll_state.content_length(length);
+            }
+            Err(e) => {
+                eprintln!("Error fetching ports: {}", e);
+            }
+        }
+    }
 
     fn fetch_ports_by_os(&self) -> Result<Vec<PortInfo>, String> {
         #[cfg(target_family = "unix")]
@@ -624,25 +602,6 @@ impl App {
         {
             windows::fetch_ports()
         }
-    }
-
-    fn stop_monitoring(&self) -> Result<(), String> {
-        // if !self.is_monitoring() {
-        //     return Err("Monitoring is not running".to_string());
-        // }
-
-        // self.set_monitoring(false);
-        Ok(())
-    }
-
-    fn update_interval(&self, new_interval: u64) -> Result<(), String> {
-        if new_interval < 1 || new_interval > 60 {
-            return Err("Interval must be between 1 and 60 seconds".to_string());
-        }
-
-        // self.set_interval(new_interval);
-
-        Ok(())
     }
 
     fn fetch_ports() -> Result<Vec<PortInfo>, String> {
