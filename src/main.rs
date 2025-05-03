@@ -104,6 +104,13 @@ impl Keybinding {
     }
 }
 
+#[derive(Debug, Default)]
+enum KillProcessAction {
+    #[default]
+    Kill,
+    Close,
+}
+
 /// The main application which holds the state and logic of the application.
 #[derive(Debug, Default)]
 pub struct App {
@@ -120,6 +127,10 @@ pub struct App {
     keybindings_table_scroll_state: ScrollbarState,
     keybindings_table_visible_rows: usize,
     keybindings_table_longest_item_lens: (u16, u16),
+    // Kill Widget
+    kill_process_display: bool,
+    kill_process_item: Option<PortInfo>,
+    kill_process_focused_action: KillProcessAction,
     // processes
     processes: Vec<PortInfo>,
     processes_filtered: Vec<PortInfo>,
@@ -223,6 +234,10 @@ impl App {
             keybindings_table_longest_item_lens: keybindings_constraint_len_calculator(
                 &*Self::init_keybindings(),
             ),
+            // Kill Widget
+            kill_process_display: false,
+            kill_process_item: None,
+            kill_process_focused_action: KillProcessAction::Kill,
             // Processes
             processes: Vec::new(),
             processes_filtered: Vec::new(),
@@ -558,15 +573,23 @@ impl App {
             (KeyModifiers::SHIFT, KeyCode::PageDown) => self.processes_table_go_to_last(),
             (KeyModifiers::NONE, KeyCode::PageUp) => self.processes_table_page_up(),
             (KeyModifiers::NONE, KeyCode::PageDown) => self.processes_table_page_down(),
-            (KeyModifiers::NONE, KeyCode::Char('j') | KeyCode::Down) => {
-                self.processes_table_next_row()
-            }
-            (KeyModifiers::NONE, KeyCode::Char('k') | KeyCode::Up) => {
-                self.processes_table_previous_row()
+            (KeyModifiers::NONE, KeyCode::Down) => self.processes_table_next_row(),
+            (KeyModifiers::NONE, KeyCode::Up) => self.processes_table_previous_row(),
+            // Table actions
+            (KeyModifiers::NONE, KeyCode::Char('k'))
+                if self.processes_table_state.selected().is_some() =>
+            {
+                self.kill_process_display = !self.kill_process_display;
+
+                if let Some(idx) = self.processes_table_state.selected() {
+                    // assuming kill_process_item implements Clone (or Copy),
+                    // otherwise use a reference
+                    self.kill_process_item = Option::from(self.processes_filtered[idx].clone());
+                }
             }
             // Change theme
-            (KeyModifiers::SHIFT, KeyCode::Char('l') | KeyCode::Right) => self.next_color(),
-            (KeyModifiers::SHIFT, KeyCode::Char('h') | KeyCode::Left) => {
+            (KeyModifiers::SHIFT, KeyCode::Right) => self.next_color(),
+            (KeyModifiers::SHIFT, KeyCode::Left) => {
                 self.previous_color();
             }
             _ => {}
@@ -591,12 +614,8 @@ impl App {
             (KeyModifiers::SHIFT, KeyCode::PageDown) => self.keybindings_table_go_to_last(),
             (KeyModifiers::NONE, KeyCode::PageUp) => self.keybindings_table_page_up(),
             (KeyModifiers::NONE, KeyCode::PageDown) => self.keybindings_table_page_down(),
-            (KeyModifiers::NONE, KeyCode::Char('j') | KeyCode::Down) => {
-                self.keybindings_table_next_row()
-            }
-            (KeyModifiers::NONE, KeyCode::Char('k') | KeyCode::Up) => {
-                self.keybindings_table_previous_row()
-            }
+            (KeyModifiers::NONE, KeyCode::Down) => self.keybindings_table_next_row(),
+            (KeyModifiers::NONE, KeyCode::Up) => self.keybindings_table_previous_row(),
 
             _ => {}
         }
@@ -656,7 +675,8 @@ impl App {
             self.render_scrollbar(frame, table_area);
         }
 
-        self.render_help_popup(frame, area);
+        self.render_keybindings_popup(frame, area);
+        self.render_kill_popup(frame, area);
     }
     /// helper function to create a centered rect using up certain percentage of the available rect `r`
     fn popup_area(&self, area: Rect, percent_x: u16, percent_y: u16) -> Rect {
@@ -667,7 +687,15 @@ impl App {
         area
     }
 
-    fn render_help_popup(&mut self, frame: &mut Frame, area: Rect) {
+    fn render_kill_popup(&mut self, frame: &mut Frame, area: Rect) {
+        if self.kill_process_display {
+            let block = Block::bordered().title("Kill ?");
+            let area = self.popup_area(area, 40, 30);
+            frame.render_widget(Clear, area);
+            frame.render_widget(block, area);
+        }
+    }
+    fn render_keybindings_popup(&mut self, frame: &mut Frame, area: Rect) {
         if self.keybindings_display {
             let selected_row_style = Style::default()
                 .add_modifier(Modifier::REVERSED)
