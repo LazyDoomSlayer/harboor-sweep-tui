@@ -11,7 +11,7 @@ use color_eyre::Result;
 
 use ratatui::{
     DefaultTerminal, Frame,
-    crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
+    crossterm::event::{self, Event as OtherEvent, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     layout::{Constraint, Layout, Margin, Position, Rect},
     prelude::{Color, Style},
     style::{self, Modifier, Stylize, palette::tailwind},
@@ -22,7 +22,7 @@ use ratatui::{
     },
 };
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 use unicode_width::UnicodeWidthStr;
 
 const PALETTES: [tailwind::Palette; 5] = [
@@ -71,8 +71,19 @@ impl TableColors {
 
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
+
+    let (event_tx, event_rx) = std::sync::mpsc::channel::<Event>();
+    let tx_to_input_events = event_tx.clone();
+    std::thread::spawn(move || {
+        handle_input_events(tx_to_input_events);
+    });
+    let tx_to_background_thread = event_tx.clone();
+    std::thread::spawn(move || {
+        run_background_thread(tx_to_background_thread);
+    });
+
     let terminal = ratatui::init();
-    let result = App::new().run(terminal);
+    let result = App::new().run(terminal, event_rx);
     ratatui::restore();
     result
 }
@@ -88,8 +99,8 @@ pub struct App {
 
     // processes
     processes: Vec<PortInfo>,
-    interval: Arc<Mutex<u64>>,
-    is_monitoring: Arc<Mutex<bool>>,
+    monitoring_interval_ms: u64,
+    is_monitoring: bool,
 
     // Table list
     state: TableState,
@@ -97,6 +108,31 @@ pub struct App {
     longest_item_lens: (u16, u16, u16, u16, u16), // order is (port pid process_name process_path port_state)
     colors: TableColors,
     color_index: usize,
+}
+
+enum Event {
+    Input(crossterm::event::KeyEvent),
+    ProccesesUpdate(Vec<PortInfo>),
+}
+
+fn handle_input_events(tx: mpsc::Sender<Event>) {
+    loop {
+        match crossterm::event::read().unwrap() {
+            crossterm::event::Event::Key(key_event) => {
+                let event = Event::Input(key_event);
+                tx.send(event).unwrap();
+            }
+            _ => {}
+        }
+    }
+}
+fn run_background_thread(tx: mpsc::Sender<Event>) {
+    loop {
+        let event = Event::ProccesesUpdate(Vec::new());
+        tx.send(event).unwrap();
+
+        std::thread::sleep(std::time::Duration::from_millis(1000));
+    }
 }
 
 impl PortInfo {
@@ -149,8 +185,8 @@ impl App {
             is_searching: false,
             // Processes
             processes: Vec::new(),
-            interval: Arc::new(Mutex::new(5)),
-            is_monitoring: Arc::new(Mutex::new(false)),
+            monitoring_interval_ms: 2_000,
+            is_monitoring: false,
             // Table list
             state: TableState::default(),
             scroll_state: ScrollbarState::new((1 * ITEM_HEIGHT) as usize),
@@ -212,20 +248,28 @@ impl App {
     }
 
     /// Run the application's main loop.
-    fn run(mut self, mut terminal: DefaultTerminal) -> Result<()> {
-        self.start_monitoring().expect("TODO: panic message");
+    fn run(mut self, mut terminal: DefaultTerminal, rx: mpsc::Receiver<Event>) -> Result<()> {
+        // self.start_monitoring().expect("TODO: panic message");
 
         loop {
-            terminal.draw(|frame| self.render(frame))?;
-
-            match event::read()? {
-                Event::Key(key) if key.kind == KeyEventKind::Press => {
-                    if matches!(self.handle_key_event(key)?, AppControlFlow::Exit) {
-                        return Ok(());
-                    }
+            match rx.recv().unwrap() {
+                Event::Input(key_event) => {
+                    self.handle_key_event(key_event)?;
                 }
-                _ => {}
+                Event::ProccesesUpdate(_data) => {
+                    // Todo
+                    println!("Hello there");
+                }
             }
+            terminal.draw(|frame| self.render(frame))?;
+            // match event::read()? {
+            //     Event::Key(key) if key.kind == KeyEventKind::Press => {
+            //         if matches!(self.handle_key_event(key)?, AppControlFlow::Exit) {
+            //             return Ok(());
+            //         }
+            //     }
+            //     _ => {}
+            // }
         }
     }
 
@@ -533,43 +577,43 @@ impl App {
     }
 
     // Processes
-    pub fn set_interval(&self, interval: u64) {
-        *self.interval.lock().unwrap() = interval;
-    }
+    // pub fn set_interval(&self, interval: u64) {
+    //     *self.interval.lock().unwrap() = interval;
+    // }
 
-    pub fn is_monitoring(&self) -> bool {
-        *self.is_monitoring.lock().unwrap()
-    }
+    // pub fn is_monitoring(&self) -> bool {
+    //     *self.is_monitoring.lock().unwrap()
+    // }
 
-    pub fn set_monitoring(&self, state: bool) {
-        *self.is_monitoring.lock().unwrap() = state;
-    }
+    // pub fn set_monitoring(&self, state: bool) {
+    //     *self.is_monitoring.lock().unwrap() = state;
+    // }
 
-    fn start_monitoring(&mut self) -> Result<(), String> {
-        // if self.is_monitoring {
-        //     return Err("Monitoring is already running".into());
-        // }
+    // fn start_monitoring(&mut self) -> Result<(), String> {
+    //     // if self.is_monitoring {
+    //     //     return Err("Monitoring is already running".into());
+    //     // }
+    //
+    //     self.set_monitoring(true);
+    //
+    //     self.monitor_ports_loop();
+    //     Ok(())
+    // }
 
-        self.set_monitoring(true);
-
-        self.monitor_ports_loop();
-        Ok(())
-    }
-
-    fn monitor_ports_loop(&mut self) {
-        match self.fetch_ports_by_os() {
-            Ok(ports) => {
-                // update vtor
-                self.processes = ports;
-                println!("{:?}", self.processes.len());
-                self.scroll_state =
-                    ScrollbarState::new(self.processes.len() * ITEM_HEIGHT as usize);
-            }
-            Err(e) => {
-                eprintln!("Error fetching ports: {}", e);
-            }
-        }
-    }
+    // fn monitor_ports_loop(&mut self) {
+    //     match self.fetch_ports_by_os() {
+    //         Ok(ports) => {
+    //             // update vtor
+    //             self.processes = ports;
+    //             println!("{:?}", self.processes.len());
+    //             self.scroll_state =
+    //                 ScrollbarState::new(self.processes.len() * ITEM_HEIGHT as usize);
+    //         }
+    //         Err(e) => {
+    //             eprintln!("Error fetching ports: {}", e);
+    //         }
+    //     }
+    // }
 
     fn fetch_ports_by_os(&self) -> Result<Vec<PortInfo>, String> {
         #[cfg(target_family = "unix")]
@@ -583,11 +627,11 @@ impl App {
     }
 
     fn stop_monitoring(&self) -> Result<(), String> {
-        if !self.is_monitoring() {
-            return Err("Monitoring is not running".to_string());
-        }
+        // if !self.is_monitoring() {
+        //     return Err("Monitoring is not running".to_string());
+        // }
 
-        self.set_monitoring(false);
+        // self.set_monitoring(false);
         Ok(())
     }
 
@@ -596,7 +640,7 @@ impl App {
             return Err("Interval must be between 1 and 60 seconds".to_string());
         }
 
-        self.set_interval(new_interval);
+        // self.set_interval(new_interval);
 
         Ok(())
     }
