@@ -22,6 +22,8 @@ use ratatui::{
     },
 };
 
+use ratatui::layout::Direction;
+use ratatui::widgets::Wrap;
 use std::{sync::mpsc, thread, time};
 use unicode_width::UnicodeWidthStr;
 
@@ -686,13 +688,93 @@ impl App {
         let [area] = horizontal.areas(area);
         area
     }
-
+    fn kill_prompt_line(&self) -> Line {
+        if let Some(item) = &self.kill_process_item {
+            let s = format!(
+                "Kill {} {:?} port {} ?",
+                item.process_name, item.port_state, item.port,
+            );
+            Line::from(Span::raw(s))
+        } else {
+            Line::from(Span::raw("Kill ?"))
+        }
+    }
+    fn kill_prompt_description(&self) -> Line {
+        if let Some(item) = &self.kill_process_item {
+            let s = format!(
+                "Ending this process may disrupt services using port {}. Proceeding could result in data loss, network issues, or system instability.",
+                item.port,
+            );
+            Line::from(Span::raw(s))
+        } else {
+            Line::from(Span::raw("Kill ?"))
+        }
+    }
     fn render_kill_popup(&mut self, frame: &mut Frame, area: Rect) {
         if self.kill_process_display {
             let block = Block::bordered().title("Kill ?");
-            let area = self.popup_area(area, 40, 30);
+            let area = self.popup_area(area, 30, 30);
             frame.render_widget(Clear, area);
             frame.render_widget(block, area);
+
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints(
+                    [
+                        Constraint::Length(2), // spacer
+                        Constraint::Length(3), // message
+                        Constraint::Length(3), // message
+                        Constraint::Min(1),
+                        Constraint::Length(3), // buttons
+                        Constraint::Length(1), // spacer
+                    ]
+                    .as_ref(),
+                )
+                .split(area);
+
+            let prompt = Paragraph::new(self.kill_prompt_line())
+                .alignment(ratatui::layout::Alignment::Center)
+                .wrap(Wrap { trim: true });
+            let prompt_area = chunks[1].inner(Margin {
+                vertical: 0,
+                horizontal: 2,
+            });
+            frame.render_widget(prompt, prompt_area);
+            let prompt_description = Paragraph::new(self.kill_prompt_description())
+                .alignment(ratatui::layout::Alignment::Center)
+                .wrap(Wrap { trim: true });
+            let prompt_description_area = chunks[2].inner(Margin {
+                vertical: 0,
+                horizontal: 2,
+            });
+            frame.render_widget(prompt_description, prompt_description_area);
+
+            let buttons = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Ratio(1, 3), Constraint::Ratio(1, 3)])
+                .flex(Flex::Center)
+                .split(chunks[4]);
+
+            let kill_button = Paragraph::new("Kill")
+                .alignment(ratatui::layout::Alignment::Center)
+                .block(
+                    Block::bordered()
+                        .border_type(BorderType::Plain)
+                        .border_style(
+                            Style::new().fg(self.processes_table_colors.footer_border_color),
+                        ),
+                );
+            let cancel_button = Paragraph::new("Cancel")
+                .alignment(ratatui::layout::Alignment::Center)
+                .block(
+                    Block::bordered()
+                        .border_type(BorderType::Plain)
+                        .border_style(
+                            Style::new().fg(self.processes_table_colors.footer_border_color),
+                        ),
+                );
+            frame.render_widget(kill_button, buttons[0]);
+            frame.render_widget(cancel_button, buttons[1]);
         }
     }
     fn render_keybindings_popup(&mut self, frame: &mut Frame, area: Rect) {
