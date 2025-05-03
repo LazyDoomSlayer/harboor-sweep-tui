@@ -16,7 +16,7 @@ use std::ffi::OsString;
 use std::hash::{Hash, Hasher};
 use std::os::windows::ffi::OsStringExt;
 
-use crate::common::{KillProcessResponse, PortInfo};
+use crate::common::{KillProcessResponse, PortInfo, ProcessPortState};
 
 const TCP_STATE_LISTEN: u32 = 2;
 
@@ -139,6 +139,11 @@ fn parse_tcp_ipv4(buffer: &[u8]) -> Vec<PortInfo> {
                 Some((process_name, process_path)) => (process_name, process_path),
                 None => (String::from("Unknown"), String::from("Unknown")),
             };
+            let port_state = if row.dwState == TCP_STATE_LISTEN {
+                ProcessPortState::Hosting
+            } else {
+                ProcessPortState::Using
+            };
 
             let port_info = PortInfo {
                 id,
@@ -146,7 +151,7 @@ fn parse_tcp_ipv4(buffer: &[u8]) -> Vec<PortInfo> {
                 process_name,
                 process_path,
                 pid: row.dwOwningPid,
-                is_listener: row.dwState == TCP_STATE_LISTEN,
+                port_state,
             };
 
             if !results
@@ -180,6 +185,11 @@ fn parse_tcp_ipv6(buffer: &[u8]) -> Vec<PortInfo> {
                 Some((process_name, process_path)) => (process_name, process_path),
                 None => (String::from("Unknown"), String::from("Unknown")),
             };
+            let port_state = if row.dwState == TCP_STATE_LISTEN {
+                ProcessPortState::Hosting
+            } else {
+                ProcessPortState::Using
+            };
 
             let port_info = PortInfo {
                 id,
@@ -187,7 +197,7 @@ fn parse_tcp_ipv6(buffer: &[u8]) -> Vec<PortInfo> {
                 process_name,
                 process_path,
                 pid: row.dwOwningPid,
-                is_listener: row.dwState == TCP_STATE_LISTEN,
+                port_state,
             };
 
             if !results
@@ -228,7 +238,7 @@ fn parse_udp_ipv4(buffer: &[u8]) -> Vec<PortInfo> {
                 process_name,
                 process_path,
                 pid: row.dwOwningPid,
-                is_listener: false,
+                port_state: ProcessPortState::Using,
             };
 
             if !results
@@ -269,7 +279,7 @@ fn parse_udp_ipv6(buffer: &[u8]) -> Vec<PortInfo> {
                 process_name,
                 process_path,
                 pid: row.dwOwningPid,
-                is_listener: false,
+                port_state: ProcessPortState::Using,
             };
 
             if !results

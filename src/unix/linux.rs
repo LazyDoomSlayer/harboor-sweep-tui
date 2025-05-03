@@ -1,4 +1,6 @@
-use crate::common::{KillProcessResponse, PortInfo, ProcessInfo, ProcessInfoResponse};
+use crate::common::{
+    KillProcessResponse, PortInfo, ProcessInfo, ProcessInfoResponse, ProcessPortState,
+};
 
 use std::collections::HashSet;
 use std::collections::hash_map::DefaultHasher;
@@ -51,7 +53,11 @@ fn parse_lsof_output(output: &str) -> Result<Vec<PortInfo>, String> {
             Err(err) => err,
         };
 
-        let is_listener = parts.get(9).map_or(false, |state| state.contains("LISTEN"));
+        let port_state = if parts.get(9).map_or(false, |state| state.contains("LISTEN")) {
+            ProcessPortState::Hosting
+        } else {
+            ProcessPortState::Using
+        };
 
         if seen.insert((pid, port)) {
             ports.push(PortInfo {
@@ -60,7 +66,7 @@ fn parse_lsof_output(output: &str) -> Result<Vec<PortInfo>, String> {
                 process_name: parts[0].to_string(),
                 port,
                 process_path,
-                is_listener,
+                port_state,
             });
         }
     }
@@ -167,14 +173,14 @@ pub fn get_processes_using_port(port: u16, item_pid: u32) -> Result<ProcessInfoR
 
         if pid == item_pid {
             return Ok(ProcessInfoResponse {
-                is_listener: true,
+                port_state: ProcessPortState::Hosting,
                 data: None,
             });
         }
 
         if let Some(process_info) = get_process_info(pid, port) {
             return Ok(ProcessInfoResponse {
-                is_listener: false,
+                port_state: ProcessPortState::Using,
                 data: Some(process_info),
             });
         }

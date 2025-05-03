@@ -1,5 +1,7 @@
 mod common;
-use crate::common::{KillProcessResponse, PortInfo, ProcessInfo, ProcessInfoResponse};
+use crate::common::{
+    KillProcessResponse, PortInfo, ProcessInfo, ProcessInfoResponse, ProcessPortState,
+};
 #[cfg(target_family = "unix")]
 pub mod unix;
 
@@ -92,7 +94,7 @@ pub struct App {
     // Table list
     state: TableState,
     scroll_state: ScrollbarState,
-    longest_item_lens: (u16, u16, u16, u16, u16), // order is (port pid process_name process_path is_listener)
+    longest_item_lens: (u16, u16, u16, u16, u16), // order is (port pid process_name process_path port_state)
     colors: TableColors,
     color_index: usize,
 }
@@ -104,7 +106,7 @@ impl PortInfo {
             self.pid.to_string(),
             self.process_name.clone(),
             self.process_path.clone(),
-            self.is_listener.to_string(),
+            format!("{:?}", self.port_state),
         ]
     }
 
@@ -120,8 +122,8 @@ impl PortInfo {
     fn port(&self) -> &u16 {
         &self.port
     }
-    fn is_listener(&self) -> &bool {
-        &self.is_listener
+    fn port_state(&self) -> &ProcessPortState {
+        &self.port_state
     }
 }
 
@@ -463,7 +465,7 @@ impl App {
                     Span::raw(format!("{}", proc.pid)),
                     Span::raw(format!("{}", proc.port)),
                     Span::raw(format!("{}", proc.process_path)),
-                    Span::raw(format!("{}", proc.is_listener)),
+                    Span::raw(format!("{:?}", proc.port_state)),
                 ]);
 
                 ListItem::new(vec![details])
@@ -562,7 +564,6 @@ impl App {
                 println!("{:?}", self.processes.len());
                 self.scroll_state =
                     ScrollbarState::new(self.processes.len() * ITEM_HEIGHT as usize);
-                self.longest_item_lens = constraint_len_calculator(&self.processes);
             }
             Err(e) => {
                 eprintln!("Error fetching ports: {}", e);
@@ -630,7 +631,7 @@ impl App {
         #[cfg(target_family = "windows")]
         {
             return Ok(ProcessInfoResponse {
-                is_listener: false,
+                port_state: ProcessPortState::Using,
                 data: Some(ProcessInfo {
                     pid: 5678,
                     port,
@@ -640,45 +641,4 @@ impl App {
             });
         }
     }
-}
-
-fn constraint_len_calculator(processes: &[PortInfo]) -> (u16, u16, u16, u16, u16) {
-    let pid = processes
-        .iter()
-        .map(|p| p.pid.to_string().width())
-        .max()
-        .unwrap_or(0);
-
-    let port = processes
-        .iter()
-        .map(|p| p.port.to_string().width())
-        .max()
-        .unwrap_or(0);
-
-    let process_name = processes
-        .iter()
-        .map(|p| p.process_name.width())
-        .max()
-        .unwrap_or(0);
-
-    let process_path = processes
-        .iter()
-        .map(|p| p.process_path.width())
-        .max()
-        .unwrap_or(0);
-
-    let is_listener = processes
-        .iter()
-        .map(|p| p.is_listener.to_string().width())
-        .max()
-        .unwrap_or(0);
-
-    // truncate into u16 (should be safe for typical terminal widths)
-    (
-        pid as u16,
-        port as u16,
-        process_name as u16,
-        process_path as u16,
-        is_listener as u16,
-    )
 }

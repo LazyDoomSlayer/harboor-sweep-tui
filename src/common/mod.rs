@@ -1,11 +1,16 @@
 #[derive(serde::Serialize, Debug)]
+pub enum ProcessPortState {
+    Hosting,
+    Using,
+}
+#[derive(serde::Serialize, Debug)]
 pub struct PortInfo {
     pub id: String,
     pub port: u16,
     pub pid: u32,
     pub process_name: String,
     pub process_path: String,
-    pub is_listener: bool,
+    pub port_state: ProcessPortState,
 }
 
 #[derive(serde::Serialize, Debug)]
@@ -16,7 +21,7 @@ pub struct KillProcessResponse {
 
 #[derive(serde::Serialize, Debug)]
 pub struct ProcessInfoResponse {
-    pub is_listener: bool,
+    pub port_state: ProcessPortState,
     pub data: Option<ProcessInfo>,
 }
 
