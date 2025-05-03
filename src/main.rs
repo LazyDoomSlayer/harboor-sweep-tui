@@ -141,9 +141,10 @@ pub struct App {
     processes_table_state: TableState,
     processes_table_scroll_state: ScrollbarState,
     processes_table_longest_item_lens: (u16, u16, u16, u16, u16),
-    processes_table_colors: TableColors,
-    processes_table_color_index: usize,
     processes_table_visible_rows: usize,
+    // Theme
+    theme_table_colors: TableColors,
+    theme_table_color_index: usize,
 }
 
 enum MultithreadingEvent {
@@ -211,6 +212,7 @@ enum ApplicationMode {
     Normal,
     Editing,
     Helping,
+    Killing,
 }
 
 enum AppControlFlow {
@@ -247,8 +249,8 @@ impl App {
             processes_table_state: TableState::default(),
             processes_table_scroll_state: ScrollbarState::new((1 * ITEM_HEIGHT) as usize),
             processes_table_longest_item_lens: (5, 5, 30, 55, 5),
-            processes_table_colors: TableColors::new(&PALETTES[0]),
-            processes_table_color_index: 0,
+            theme_table_colors: TableColors::new(&PALETTES[0]),
+            theme_table_color_index: 0,
             processes_table_visible_rows: 0,
         }
     }
@@ -477,15 +479,15 @@ impl App {
             .position(new * ITEM_HEIGHT as usize);
     }
     pub fn next_color(&mut self) {
-        self.processes_table_color_index = (self.processes_table_color_index + 1) % PALETTES.len();
+        self.theme_table_color_index = (self.theme_table_color_index + 1) % PALETTES.len();
     }
 
     pub fn previous_color(&mut self) {
         let count = PALETTES.len();
-        self.processes_table_color_index = (self.processes_table_color_index + count - 1) % count;
+        self.theme_table_color_index = (self.theme_table_color_index + count - 1) % count;
     }
     pub fn set_colors(&mut self) {
-        self.processes_table_colors = TableColors::new(&PALETTES[self.processes_table_color_index]);
+        self.theme_table_colors = TableColors::new(&PALETTES[self.theme_table_color_index]);
     }
 
     /// Run the application's main loop.
@@ -529,6 +531,10 @@ impl App {
     fn handle_key_event(&mut self, key: KeyEvent) -> Result<AppControlFlow> {
         match self.application_mode {
             ApplicationMode::Normal => self.handle_normal_mode_key(key),
+            ApplicationMode::Normal =>  {
+                self.handle_editing_mode_key(key);
+                Ok(AppControlFlow::Continue)
+            }
             ApplicationMode::Editing => {
                 self.handle_editing_mode_key(key);
                 Ok(AppControlFlow::Continue)
@@ -682,19 +688,19 @@ impl App {
     }
     /// helper function to create a centered rect using up certain percentage of the available rect `r`
     fn popup_area(&self, area: Rect, percent_x: u16, percent_y: u16) -> Rect {
-        let vertical = Layout::vertical([Constraint::Percentage(percent_y)]).flex(Flex::Center);
-        let horizontal = Layout::horizontal([Constraint::Percentage(percent_x)]).flex(Flex::Center);
+        let vertical = Layout::vertical([Constraint::Ratio(4, 9)]).flex(Flex::Center);
+        let horizontal = Layout::horizontal([Constraint::Ratio(5, 9)]).flex(Flex::Center);
         let [area] = vertical.areas(area);
         let [area] = horizontal.areas(area);
         area
     }
     fn kill_prompt_line(&self) -> Line {
         if let Some(item) = &self.kill_process_item {
-            let s = format!(
+            let title = format!(
                 "Kill {} {:?} port {} ?",
                 item.process_name, item.port_state, item.port,
             );
-            Line::from(Span::raw(s))
+            Line::from(Span::raw(title))
         } else {
             Line::from(Span::raw("Kill ?"))
         }
@@ -712,7 +718,12 @@ impl App {
     }
     fn render_kill_popup(&mut self, frame: &mut Frame, area: Rect) {
         if self.kill_process_display {
-            let block = Block::bordered().title("Kill ?");
+            let block = Block::bordered()
+                .border_type(BorderType::Plain)
+                .border_style(Style::new().fg(self.theme_table_colors.footer_border_color))
+                .bg(self.theme_table_colors.buffer_bg)
+                .title("Kill");
+
             let area = self.popup_area(area, 30, 30);
             frame.render_widget(Clear, area);
             frame.render_widget(block, area);
@@ -724,7 +735,7 @@ impl App {
                         Constraint::Length(2), // spacer
                         Constraint::Length(3), // message
                         Constraint::Length(3), // message
-                        Constraint::Min(1),
+                        Constraint::Min(1),    // spacer
                         Constraint::Length(3), // buttons
                         Constraint::Length(1), // spacer
                     ]
@@ -733,6 +744,11 @@ impl App {
                 .split(area);
 
             let prompt = Paragraph::new(self.kill_prompt_line())
+                .style(
+                    Style::default()
+                        .fg(self.theme_table_colors.row_fg)
+                        .bg(self.theme_table_colors.buffer_bg),
+                )
                 .alignment(ratatui::layout::Alignment::Center)
                 .wrap(Wrap { trim: true });
             let prompt_area = chunks[1].inner(Margin {
@@ -741,6 +757,11 @@ impl App {
             });
             frame.render_widget(prompt, prompt_area);
             let prompt_description = Paragraph::new(self.kill_prompt_description())
+                .style(
+                    Style::default()
+                        .fg(self.theme_table_colors.row_fg)
+                        .bg(self.theme_table_colors.buffer_bg),
+                )
                 .alignment(ratatui::layout::Alignment::Center)
                 .wrap(Wrap { trim: true });
             let prompt_description_area = chunks[2].inner(Margin {
@@ -755,24 +776,28 @@ impl App {
                 .flex(Flex::Center)
                 .split(chunks[4]);
 
+            //
+
             let kill_button = Paragraph::new("Kill")
                 .alignment(ratatui::layout::Alignment::Center)
-                .block(
-                    Block::bordered()
+                .block(match self.kill_process_focused_action {
+                    KillProcessAction::Kill => Block::bordered()
                         .border_type(BorderType::Plain)
-                        .border_style(
-                            Style::new().fg(self.processes_table_colors.footer_border_color),
-                        ),
-                );
+                        .border_style(Style::new().fg(tailwind::RED.c400)),
+                    KillProcessAction::Close => Block::bordered()
+                        .border_type(BorderType::Plain)
+                        .border_style(Style::new().fg(self.theme_table_colors.footer_border_color)),
+                });
             let cancel_button = Paragraph::new("Cancel")
                 .alignment(ratatui::layout::Alignment::Center)
-                .block(
-                    Block::bordered()
+                .block(match self.kill_process_focused_action {
+                    KillProcessAction::Close => Block::bordered()
                         .border_type(BorderType::Plain)
-                        .border_style(
-                            Style::new().fg(self.processes_table_colors.footer_border_color),
-                        ),
-                );
+                        .border_style(Style::new().fg(tailwind::RED.c400)),
+                    KillProcessAction::Kill => Block::bordered()
+                        .border_type(BorderType::Plain)
+                        .border_style(Style::new().fg(self.theme_table_colors.footer_border_color)),
+                });
             frame.render_widget(kill_button, buttons[0]);
             frame.render_widget(cancel_button, buttons[1]);
         }
@@ -781,17 +806,17 @@ impl App {
         if self.keybindings_display {
             let selected_row_style = Style::default()
                 .add_modifier(Modifier::REVERSED)
-                .fg(self.processes_table_colors.selected_row_style_fg);
+                .fg(self.theme_table_colors.selected_row_style_fg);
             let selected_cell_style = Style::default()
                 .add_modifier(Modifier::REVERSED)
-                .fg(self.processes_table_colors.selected_cell_style_fg);
+                .fg(self.theme_table_colors.selected_cell_style_fg);
 
             let combo_style = Style::new()
-                .fg(self.processes_table_colors.selected_row_style_fg)
-                .bg(self.processes_table_colors.buffer_bg);
+                .fg(self.theme_table_colors.selected_row_style_fg)
+                .bg(self.theme_table_colors.buffer_bg);
             let desc_style = Style::new()
-                .fg(self.processes_table_colors.row_fg)
-                .bg(self.processes_table_colors.buffer_bg);
+                .fg(self.theme_table_colors.row_fg)
+                .bg(self.theme_table_colors.buffer_bg);
 
             let rows = self.keybindings.iter().map(|kb| {
                 // build each row by styling its cells individually
@@ -819,12 +844,12 @@ impl App {
             )
             .row_highlight_style(selected_row_style)
             .cell_highlight_style(selected_cell_style)
-            .bg(self.processes_table_colors.buffer_bg)
+            .bg(self.theme_table_colors.buffer_bg)
             .highlight_spacing(HighlightSpacing::Always)
             .block(
                 Block::bordered()
                     .border_type(BorderType::Plain)
-                    .border_style(Style::new().fg(self.processes_table_colors.footer_border_color))
+                    .border_style(Style::new().fg(self.theme_table_colors.footer_border_color))
                     .title("Keybindings"),
             );
 
@@ -849,33 +874,21 @@ impl App {
 
     fn render_search(&mut self, frame: &mut Frame, area: Rect) {
         let input = Paragraph::new(self.processes_search_input.as_str())
-            .style(match self.application_mode {
-                ApplicationMode::Normal => Style::new()
-                    .fg(self.processes_table_colors.row_fg)
-                    .bg(self.processes_table_colors.buffer_bg),
-                ApplicationMode::Editing => Style::default()
-                    .fg(self.processes_table_colors.row_fg)
-                    .bg(self.processes_table_colors.buffer_bg),
-                ApplicationMode::Helping => Style::default()
-                    .fg(self.processes_table_colors.row_fg)
-                    .bg(self.processes_table_colors.buffer_bg),
-            })
+            .style(
+                Style::default()
+                    .fg(self.theme_table_colors.row_fg)
+                    .bg(self.theme_table_colors.buffer_bg),
+            )
             .block(
                 Block::bordered()
                     .border_type(BorderType::Plain)
-                    .border_style(Style::new().fg(self.processes_table_colors.footer_border_color))
+                    .border_style(Style::new().fg(self.theme_table_colors.footer_border_color))
                     .title("Search"),
             );
 
         frame.render_widget(input, area);
 
         match self.application_mode {
-            // Hide the cursor. `Frame` does this by default, so we don't need to do anything here
-            ApplicationMode::Normal => {}
-            ApplicationMode::Helping => {}
-
-            // Make the cursor visible and ask ratatui to put it at the specified coordinates after
-            // rendering
             #[allow(clippy::cast_possible_truncation)]
             ApplicationMode::Editing => frame.set_cursor_position(Position::new(
                 // Draw the cursor at the current position in the input field.
@@ -884,19 +897,20 @@ impl App {
                 // Move one line down, from the border to the input line
                 area.y + 1,
             )),
+            _ => {}
         }
     }
 
     fn render_table(&mut self, frame: &mut Frame, area: Rect) {
         let header_style = Style::default()
-            .fg(self.processes_table_colors.header_fg)
-            .bg(self.processes_table_colors.header_bg);
+            .fg(self.theme_table_colors.header_fg)
+            .bg(self.theme_table_colors.header_bg);
         let selected_row_style = Style::default()
             .add_modifier(Modifier::REVERSED)
-            .fg(self.processes_table_colors.selected_row_style_fg);
+            .fg(self.theme_table_colors.selected_row_style_fg);
         let selected_cell_style = Style::default()
             .add_modifier(Modifier::REVERSED)
-            .fg(self.processes_table_colors.selected_cell_style_fg);
+            .fg(self.theme_table_colors.selected_cell_style_fg);
 
         let header = ["PID", "Port", "Process Name", "Process Path", "Listener"]
             .into_iter()
@@ -931,7 +945,7 @@ impl App {
         .header(header)
         .row_highlight_style(selected_row_style)
         .cell_highlight_style(selected_cell_style)
-        .bg(self.processes_table_colors.buffer_bg)
+        .bg(self.theme_table_colors.buffer_bg)
         .highlight_spacing(HighlightSpacing::Always);
 
         // .block(
@@ -960,14 +974,14 @@ impl App {
         let info_footer = Paragraph::new(Text::from_iter(INFO_TEXT))
             .style(
                 Style::new()
-                    .fg(self.processes_table_colors.row_fg)
-                    .bg(self.processes_table_colors.buffer_bg),
+                    .fg(self.theme_table_colors.row_fg)
+                    .bg(self.theme_table_colors.buffer_bg),
             )
             .centered()
             .block(
                 Block::bordered()
                     .border_type(BorderType::Plain)
-                    .border_style(Style::new().fg(self.processes_table_colors.footer_border_color)),
+                    .border_style(Style::new().fg(self.theme_table_colors.footer_border_color)),
             );
         frame.render_widget(info_footer, area);
     }
