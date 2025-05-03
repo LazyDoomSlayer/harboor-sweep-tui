@@ -116,9 +116,18 @@ enum MultithreadingEvent {
 
 fn handle_input_events(tx: mpsc::Sender<MultithreadingEvent>) {
     loop {
-        let evt = event::read().expect("failed reading crossterm event");
-        tx.send(MultithreadingEvent::Crossterm(evt))
-            .expect("failed to send input event");
+        let evt = match event::read() {
+            Ok(evt) => evt,
+            Err(e) => {
+                eprintln!("Error reading crossterm event: {}", e);
+                break;
+            }
+        };
+
+        let msg = MultithreadingEvent::Crossterm(evt);
+        if tx.send(msg).is_err() {
+            break;
+        }
     }
 }
 
