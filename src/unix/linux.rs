@@ -2,8 +2,8 @@ use crate::common::{
     KillProcessResponse, PortInfo, ProcessInfo, ProcessInfoResponse, ProcessPortState,
 };
 
-use std::collections::HashSet;
 use std::collections::hash_map::DefaultHasher;
+use std::collections::HashSet;
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
@@ -16,10 +16,15 @@ pub fn fetch_ports() -> Result<Vec<PortInfo>, String> {
         .map_err(|e| format!("Failed to execute lsof: {}", e))?;
 
     if !output.status.success() {
-        return Err(format!(
-            "lsof command failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        ));
+        return if output.status.code() == Some(1) {
+            Ok(Vec::new())
+        } else {
+            Err(format!(
+                "lsof command failed (code {:?}): {}",
+                output.status.code(),
+                String::from_utf8_lossy(&output.stderr)
+            ))
+        };
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -131,15 +136,25 @@ pub fn get_processes_using_port(port: u16, item_pid: u32) -> Result<ProcessInfoR
         .arg("-i")
         .arg(format!(":{}", port))
         .output()
-        .map_err(|e| format!("Failed to execute lsof command: {}", e))?;
+        .map_err(|e| format!("Failed to execute lsof: {}", e))?;
 
     if !output.status.success() {
-        return Err(format!(
-            "lsof command failed with status {}: {}",
-            output.status,
-            String::from_utf8_lossy(&output.stderr)
-        ));
+        return if output.status.code() == Some(1) {
+            Ok(ProcessInfoResponse {
+                port_state: ProcessPortState::Listening,
+                data: None,
+            })
+        } else {
+            Err(format!(
+                "lsof command failed (code {:?}): {}",
+                output.status.code(),
+                String::from_utf8_lossy(&output.stderr)
+            ))
+        };
     }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    parse_lsof_port_output(&stdout, item_pid);
 
     let stdout = String::from_utf8_lossy(&output.stdout);
 
