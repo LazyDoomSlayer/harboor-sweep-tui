@@ -1,5 +1,8 @@
 mod model;
+mod util;
+
 use crate::model::{KillProcessResponse, PortInfo, os};
+use crate::util::{keybindings_constraint_len_calculator, popup_area};
 
 use color_eyre::Result;
 use ratatui::{
@@ -686,14 +689,7 @@ impl App {
         self.render_keybindings_popup(frame, area);
         self.render_kill_popup(frame, area);
     }
-    /// helper function to create a centered rect using up certain percentage of the available rect `r`
-    fn popup_area(&self, area: Rect, percent_x: u32, percent_y: u32) -> Rect {
-        let vertical = Layout::vertical([Constraint::Ratio(percent_y, 9)]).flex(Flex::Center);
-        let horizontal = Layout::horizontal([Constraint::Ratio(percent_x, 9)]).flex(Flex::Center);
-        let [area] = vertical.areas(area);
-        let [area] = horizontal.areas(area);
-        area
-    }
+
     fn kill_prompt_line(&self) -> Line {
         if let Some(item) = &self.kill_process_item {
             let title = format!(
@@ -724,7 +720,7 @@ impl App {
                 .bg(self.theme_table_colors.buffer_bg)
                 .title("Kill");
 
-            let area = self.popup_area(area, 4, 5);
+            let area = popup_area(area, 4, 5);
             frame.render_widget(Clear, area);
             frame.render_widget(block, area);
 
@@ -853,7 +849,7 @@ impl App {
                     .title("Keybindings"),
             );
 
-            let area = self.popup_area(area, 4, 5);
+            let area = popup_area(area, 4, 5);
             self.keybindings_table_visible_rows = area.height as usize - 1;
             frame.render_widget(Clear, area);
             frame.render_stateful_widget(table, area, &mut self.keybindings_table_state);
@@ -1092,23 +1088,4 @@ impl App {
             }
         }
     }
-}
-
-fn keybindings_constraint_len_calculator(items: &[Keybinding]) -> (u16, u16) {
-    let combo = items
-        .iter()
-        .map(Keybinding::combo)
-        .map(UnicodeWidthStr::width)
-        .max()
-        .unwrap_or(0);
-    let description = items
-        .iter()
-        .map(Keybinding::description)
-        .flat_map(str::lines)
-        .map(UnicodeWidthStr::width)
-        .max()
-        .unwrap_or(0);
-
-    #[allow(clippy::cast_possible_truncation)]
-    (combo as u16, description as u16)
 }
