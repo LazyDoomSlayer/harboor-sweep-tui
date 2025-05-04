@@ -141,7 +141,7 @@ pub fn get_processes_using_port(port: u16, item_pid: u32) -> Result<ProcessInfoR
     if !output.status.success() {
         return if output.status.code() == Some(1) {
             Ok(ProcessInfoResponse {
-                port_state: ProcessPortState::Listening,
+                port_state: ProcessPortState::Using,
                 data: None,
             })
         } else {
@@ -152,9 +152,6 @@ pub fn get_processes_using_port(port: u16, item_pid: u32) -> Result<ProcessInfoR
             ))
         };
     }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    parse_lsof_port_output(&stdout, item_pid);
 
     let stdout = String::from_utf8_lossy(&output.stdout);
 
