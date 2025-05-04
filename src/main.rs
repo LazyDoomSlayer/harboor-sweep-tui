@@ -8,16 +8,16 @@ pub mod windows;
 
 use color_eyre::Result;
 use ratatui::{
-    crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers}, layout::{Constraint, Flex, Layout, Margin, Position, Rect},
+    DefaultTerminal, Frame,
+    crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
+    layout::{Constraint, Flex, Layout, Margin, Position, Rect},
     prelude::{Color, Style},
-    style::{palette::tailwind, Modifier, Stylize},
+    style::{Modifier, Stylize, palette::tailwind},
     text::{Line, Span, Text},
     widgets::{
         Block, BorderType, Cell, Clear, HighlightSpacing, Paragraph, Row, Scrollbar,
         ScrollbarOrientation, ScrollbarState, Table, TableState,
     },
-    DefaultTerminal,
-    Frame,
 };
 
 use ratatui::layout::Direction;
@@ -917,7 +917,7 @@ impl App {
             .add_modifier(Modifier::REVERSED)
             .fg(self.theme_table_colors.selected_cell_style_fg);
 
-        let header = ["PID", "Port", "Process Name", "Process Path", "Listener"]
+        let header = ["Port", "PID", "Process Name", "Process Path", "Listener"]
             .into_iter()
             .map(Cell::from)
             .collect::<Row>()
