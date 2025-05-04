@@ -1,22 +1,27 @@
-use windows::Win32::Foundation::NO_ERROR;
-use windows::Win32::Foundation::{CloseHandle, ERROR_ACCESS_DENIED};
-use windows::Win32::NetworkManagement::IpHelper::{
-    GetExtendedTcpTable, GetExtendedUdpTable, MIB_TCP6TABLE_OWNER_PID, MIB_TCPTABLE_OWNER_PID,
-    MIB_UDP6TABLE_OWNER_PID, MIB_UDPTABLE_OWNER_PID, TCP_TABLE_OWNER_PID_ALL, UDP_TABLE_OWNER_PID,
+use windows::Win32::{
+    Foundation::{CloseHandle, ERROR_ACCESS_DENIED, NO_ERROR},
+    NetworkManagement::IpHelper::{
+        GetExtendedTcpTable, GetExtendedUdpTable, MIB_TCP6TABLE_OWNER_PID, MIB_TCPTABLE_OWNER_PID,
+        MIB_UDP6TABLE_OWNER_PID, MIB_UDPTABLE_OWNER_PID, TCP_TABLE_OWNER_PID_ALL,
+        UDP_TABLE_OWNER_PID,
+    },
+    System::{
+        ProcessStatus::{K32GetModuleBaseNameW, K32GetModuleFileNameExW},
+        Threading::{
+            OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_TERMINATE, PROCESS_VM_READ,
+            TerminateProcess,
+        },
+    },
 };
-use windows::Win32::System::Threading::PROCESS_TERMINATE;
-use windows::Win32::System::Threading::{
-    OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ, TerminateProcess,
+
+use std::{
+    collections::hash_map::DefaultHasher,
+    ffi::OsString,
+    hash::{Hash, Hasher},
+    os::windows::ffi::OsStringExt,
 };
 
-use windows::Win32::System::ProcessStatus::{K32GetModuleBaseNameW, K32GetModuleFileNameExW};
-
-use std::collections::hash_map::DefaultHasher;
-use std::ffi::OsString;
-use std::hash::{Hash, Hasher};
-use std::os::windows::ffi::OsStringExt;
-
-use crate::common::{KillProcessResponse, PortInfo, ProcessPortState};
+use crate::model::{KillProcessResponse, PortInfo, ProcessPortState};
 
 const TCP_STATE_LISTEN: u32 = 2;
 
@@ -294,7 +299,7 @@ fn parse_udp_ipv6(buffer: &[u8]) -> Vec<PortInfo> {
     results
 }
 
-pub fn fetch_ports() -> Result<Vec<crate::common::PortInfo>, String> {
+pub fn fetch_ports() -> Result<Vec<PortInfo>, String> {
     let protocols = [
         Protocol::TcpIpv4,
         Protocol::TcpIpv6,

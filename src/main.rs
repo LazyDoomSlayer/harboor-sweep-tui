@@ -1,10 +1,5 @@
-mod common;
-use crate::common::{KillProcessResponse, PortInfo};
-#[cfg(target_family = "unix")]
-pub mod unix;
-
-#[cfg(target_family = "windows")]
-pub mod windows;
+mod model;
+use crate::model::{KillProcessResponse, PortInfo, os};
 
 use color_eyre::Result;
 use ratatui::{
@@ -527,7 +522,7 @@ impl App {
                 match self.kill_process_focused_action {
                     KillProcessAction::Kill => {
                         if let Some(item) = self.kill_process_item.take() {
-                            self.kill_process(item.pid);
+                            os::kill_process(item.pid);
                         }
                     }
                     KillProcessAction::Close => {
@@ -1084,7 +1079,7 @@ impl App {
     }
 
     fn monitor_ports_loop(&mut self) {
-        match self.fetch_ports_by_os() {
+        match os::fetch_ports() {
             Ok(ports) => {
                 self.processes = ports;
                 self.update_filtered_processes();
@@ -1097,58 +1092,6 @@ impl App {
             }
         }
     }
-
-    fn fetch_ports_by_os(&self) -> Result<Vec<PortInfo>, String> {
-        #[cfg(target_family = "unix")]
-        {
-            unix::fetch_ports()
-        }
-        #[cfg(target_family = "windows")]
-        {
-            windows::fetch_ports()
-        }
-    }
-
-    // fn fetch_ports() -> Result<Vec<PortInfo>, String> {
-    //     #[cfg(target_family = "unix")]
-    //     {
-    //         unix::fetch_ports()
-    //     }
-    //     #[cfg(target_family = "windows")]
-    //     {
-    //         windows::fetch_ports()
-    //     }
-    // }
-
-    fn kill_process(&mut self, pid: u32) -> KillProcessResponse {
-        #[cfg(target_family = "unix")]
-        {
-            unix::kill_process(pid)
-        }
-        #[cfg(target_family = "windows")]
-        {
-            windows::kill_process(pid)
-        }
-    }
-
-    // fn get_processes_using_port(port: u16, item_pid: u32) -> Result<ProcessInfoResponse, String> {
-    //     #[cfg(target_family = "unix")]
-    //     {
-    //         unix::get_processes_using_port(port, item_pid)
-    //     }
-    //     #[cfg(target_family = "windows")]
-    //     {
-    //         return Ok(ProcessInfoResponse {
-    //             port_state: ProcessPortState::Using,
-    //             data: Some(ProcessInfo {
-    //                 pid: 5678,
-    //                 port,
-    //                 process_name: "mocked_process.exe".to_string(),
-    //                 process_path: item_pid.to_string(),
-    //             }),
-    //         });
-    //     }
-    // }
 }
 
 fn keybindings_constraint_len_calculator(items: &[Keybinding]) -> (u16, u16) {

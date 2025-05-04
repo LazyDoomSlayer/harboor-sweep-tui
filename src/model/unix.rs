@@ -1,13 +1,14 @@
-use crate::common::{
+use crate::model::{
     KillProcessResponse, PortInfo, ProcessInfo, ProcessInfoResponse, ProcessPortState,
 };
 
-use std::collections::hash_map::DefaultHasher;
-use std::collections::HashSet;
-use std::fs;
-use std::hash::{Hash, Hasher};
-use std::path::PathBuf;
-use std::process::Command;
+use std::{
+    collections::{HashSet, hash_map::DefaultHasher},
+    fs,
+    hash::{Hash, Hasher},
+    path::PathBuf,
+    process::Command,
+};
 
 pub fn fetch_ports() -> Result<Vec<PortInfo>, String> {
     let output = Command::new("lsof")
