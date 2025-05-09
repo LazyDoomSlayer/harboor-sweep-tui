@@ -1,5 +1,5 @@
-use crate::TableColors;
 use crate::model::PortInfo;
+use crate::{ITEM_HEIGHT, TableColors};
 use ratatui::{
     Frame,
     layout::{Constraint, Margin, Rect},
@@ -43,6 +43,73 @@ impl ProcessTableComponent {
         self.items = items;
         let content_len = self.items.len() * crate::ITEM_HEIGHT as usize;
         self.scroll = self.scroll.content_length(content_len);
+    }
+
+    /// Move selection down by one row
+    pub fn next_row(&mut self) {
+        let len = self.items.len();
+        let idx = match self.state.selected() {
+            Some(i) if i + 1 < len => i + 1,
+            _ if len > 0 => 0,
+            _ => return,
+        };
+        self.state.select(Some(idx));
+        self.scroll = self.scroll.position(idx * crate::ITEM_HEIGHT as usize);
+    }
+
+    /// Move selection up by one row
+    pub fn previous_row(&mut self) {
+        let len = self.items.len();
+        let idx = match self.state.selected() {
+            Some(0) if len > 0 => len - 1,
+            Some(i) => i - 1,
+            _ if len > 0 => 0,
+            _ => return,
+        };
+        self.state.select(Some(idx));
+        self.scroll = self.scroll.position(idx * crate::ITEM_HEIGHT as usize);
+    }
+
+    /// Jump to the first row
+    pub fn first_row(&mut self) {
+        if !self.items.is_empty() {
+            self.state.select(Some(0));
+            self.scroll = self.scroll.position(0);
+        }
+    }
+
+    /// Jump to the last row
+    pub fn last_row(&mut self) {
+        let len = self.items.len();
+        if len > 0 {
+            let last = len - 1;
+            self.state.select(Some(last));
+            self.scroll = self.scroll.position(last * crate::ITEM_HEIGHT as usize);
+        }
+    }
+
+    /// Page down by visible_rows
+    pub fn page_down(&mut self) {
+        let len = self.items.len();
+        if len == 0 {
+            return;
+        }
+        let current = self.state.selected().unwrap_or(0);
+        let new = (current + self.visible_rows).min(len - 1);
+        self.state.select(Some(new));
+        self.scroll = self.scroll.position(new * crate::ITEM_HEIGHT as usize);
+    }
+
+    /// Page up by visible_rows
+    pub fn page_up(&mut self) {
+        let len = self.items.len();
+        if len == 0 {
+            return;
+        }
+        let current = self.state.selected().unwrap_or(0);
+        let new = current.saturating_sub(self.visible_rows);
+        self.state.select(Some(new));
+        self.scroll = self.scroll.position(new * crate::ITEM_HEIGHT as usize);
     }
 
     /// Render the table and its scrollbar

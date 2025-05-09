@@ -276,74 +276,6 @@ impl App {
     }
 
     /// Table list
-    pub fn processes_table_next_row(&mut self) {
-        let i = match self.table.state.selected() {
-            Some(i) => {
-                if i >= self.processes_filtered.len() - 1 {
-                    0
-                } else {
-                    i + 1
-                }
-            }
-            None => 0,
-        };
-        self.table.state.select(Some(i));
-        self.table.scroll = self.table.scroll.position(i * ITEM_HEIGHT as usize);
-    }
-    pub fn processes_table_previous_row(&mut self) {
-        let i = match self.table.state.selected() {
-            Some(i) => {
-                if i == 0 {
-                    self.processes_filtered.len() - 1
-                } else {
-                    i - 1
-                }
-            }
-            None => 0,
-        };
-        self.table.state.select(Some(i));
-        self.table.scroll = self.table.scroll.position(i * ITEM_HEIGHT as usize);
-    }
-    pub fn processes_table_go_to_first(&mut self) {
-        if !self.processes_filtered.is_empty() {
-            self.table.state.select(Some(0));
-            self.table.scroll = self.table.scroll.position(0);
-        }
-    }
-    pub fn processes_table_go_to_last(&mut self) {
-        let len = self.processes_filtered.len();
-        if len > 0 {
-            let last = len - 1;
-            self.table.state.select(Some(last));
-            self.table.scroll = self.table.scroll.position(last * ITEM_HEIGHT as usize);
-        }
-    }
-    pub fn processes_table_page_down(&mut self) {
-        let len = self.processes_filtered.len();
-        if len == 0 {
-            return;
-        }
-
-        let current = self.table.state.selected().unwrap_or(0);
-        // move down by one screenful, clamped to last row
-        let new = (current + self.table.visible_rows).min(len - 1);
-
-        self.table.state.select(Some(new));
-        self.table.scroll = self.table.scroll.position(new * ITEM_HEIGHT as usize);
-    }
-    pub fn processes_table_page_up(&mut self) {
-        let len = self.processes_filtered.len();
-        if len == 0 {
-            return;
-        }
-
-        let current = self.table.state.selected().unwrap_or(0);
-        // move up by one screenful, clamped at zero
-        let new = current.saturating_sub(self.table.visible_rows);
-
-        self.table.state.select(Some(new));
-        self.table.scroll = self.table.scroll.position(new * ITEM_HEIGHT as usize);
-    }
 
     // keybindings
     pub fn keybindings_table_next_row(&mut self) {
@@ -560,12 +492,12 @@ impl App {
                 self.application_mode = ApplicationMode::Editing;
             }
             // Navigate in the list
-            (KeyModifiers::SHIFT, KeyCode::PageUp) => self.processes_table_go_to_first(),
-            (KeyModifiers::SHIFT, KeyCode::PageDown) => self.processes_table_go_to_last(),
-            (KeyModifiers::NONE, KeyCode::PageUp) => self.processes_table_page_up(),
-            (KeyModifiers::NONE, KeyCode::PageDown) => self.processes_table_page_down(),
-            (KeyModifiers::NONE, KeyCode::Down) => self.processes_table_next_row(),
-            (KeyModifiers::NONE, KeyCode::Up) => self.processes_table_previous_row(),
+            (KeyModifiers::SHIFT, KeyCode::PageUp) => self.table.first_row(),
+            (KeyModifiers::SHIFT, KeyCode::PageDown) => self.table.last_row(),
+            (KeyModifiers::NONE, KeyCode::PageUp) => self.table.page_up(),
+            (KeyModifiers::NONE, KeyCode::PageDown) => self.table.page_down(),
+            (KeyModifiers::NONE, KeyCode::Down) => self.table.next_row(),
+            (KeyModifiers::NONE, KeyCode::Up) => self.table.previous_row(),
             // Table actions
             (KeyModifiers::NONE, KeyCode::Char('k')) if self.table.state.selected().is_some() => {
                 self.kill_process_display = !self.kill_process_display;
@@ -622,11 +554,11 @@ impl App {
             KeyCode::Right => self.search.move_cursor_right(),
             KeyCode::Down => {
                 self.application_mode = ApplicationMode::Normal;
-                self.processes_table_next_row()
+                self.table.next_row()
             }
             KeyCode::Up => {
                 self.application_mode = ApplicationMode::Normal;
-                self.processes_table_previous_row()
+                self.table.previous_row()
             }
             KeyCode::Esc => self.toggle_processes_search_display(),
 
