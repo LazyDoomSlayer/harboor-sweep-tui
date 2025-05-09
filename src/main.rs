@@ -4,6 +4,7 @@ mod util;
 
 use crate::model::{PortInfo, os};
 use crate::ui::keybindings_component::KeybindingsComponent;
+use crate::ui::kill_process_component::{KillAction, KillComponent};
 use crate::ui::process_search_component::ProcessSearchComponent;
 use crate::ui::process_table_component::ProcessTableComponent;
 use crate::ui::theme::Theme;
@@ -44,13 +45,6 @@ fn main() -> color_eyre::Result<()> {
     result
 }
 
-#[derive(Debug, Default)]
-enum KillProcessAction {
-    #[default]
-    Kill,
-    Close,
-}
-
 /// The main application which holds the state and logic of the application.
 #[derive(Debug, Default)]
 pub struct App {
@@ -61,11 +55,8 @@ pub struct App {
     pub table: ProcessTableComponent,
     pub keybindings: KeybindingsComponent,
     pub theme: Theme,
+    pub kill_process: KillComponent,
 
-    // Kill Widget
-    kill_process_display: bool,
-    kill_process_item: Option<PortInfo>,
-    kill_process_focused_action: KillProcessAction,
     // processes
     processes: Vec<PortInfo>,
     processes_filtered: Vec<PortInfo>,
@@ -138,11 +129,8 @@ impl App {
             table: ProcessTableComponent::default(),
             keybindings: KeybindingsComponent::default(),
             theme: Theme::default(),
+            kill_process: KillComponent::default(),
 
-            // Kill Widget
-            kill_process_display: false,
-            kill_process_item: None,
-            kill_process_focused_action: KillProcessAction::Kill,
             // Processes
             processes: Vec::new(),
             processes_filtered: Vec::new(),
@@ -280,17 +268,17 @@ impl App {
             (KeyModifiers::NONE, KeyCode::Up) => self.table.previous_row(),
             // Table actions
             (KeyModifiers::NONE, KeyCode::Char('k')) if self.table.state.selected().is_some() => {
-                self.kill_process_display = !self.kill_process_display;
-                if self.kill_process_display {
+                self.kill_process.display = !self.kill_process.display;
+                if self.kill_process.display {
                     self.application_mode = ApplicationMode::Killing;
                 } else {
                     self.application_mode = ApplicationMode::Normal;
                 }
 
                 if let Some(idx) = self.table.state.selected() {
-                    // assuming kill_process_item implements Clone (or Copy),
+                    // assuming kill_process.item implements Clone (or Copy),
                     // otherwise use a reference
-                    self.kill_process_item = Option::from(self.processes_filtered[idx].clone());
+                    self.kill_process.item = Option::from(self.processes_filtered[idx].clone());
                 }
             }
             // Change theme
@@ -343,43 +331,36 @@ impl App {
     fn handle_killing_mode_key(&mut self, key: KeyEvent) {
         match (key.modifiers, key.code) {
             (KeyModifiers::NONE, KeyCode::Left) => {
-                self.kill_process_focused_action = KillProcessAction::Kill;
+                self.kill_process.action = KillAction::Kill;
             }
             (KeyModifiers::NONE, KeyCode::Right) => {
-                self.kill_process_focused_action = KillProcessAction::Close;
+                self.kill_process.action = KillAction::Cancel;
             }
             (KeyModifiers::NONE, KeyCode::Enter) => {
-                match self.kill_process_focused_action {
-                    KillProcessAction::Kill => {
-                        if let Some(item) = self.kill_process_item.take() {
+                match self.kill_process.action {
+                    KillAction::Kill => {
+                        if let Some(item) = self.kill_process.item.take() {
                             os::kill_process(item.pid);
                         }
                     }
-                    KillProcessAction::Close => {
-                        self.kill_process_item.take();
+                    KillAction::Cancel => {
+                        self.kill_process.item.take();
                     }
                 }
-                self.kill_process_display = false;
+                self.kill_process.display = false;
                 self.application_mode = ApplicationMode::Normal;
             }
             (KeyModifiers::NONE, KeyCode::Esc) => {
-                self.kill_process_display = false;
+                self.kill_process.display = false;
                 self.application_mode = ApplicationMode::Normal;
-                self.kill_process_item.take();
+                self.kill_process.item.take();
             }
             _ => {}
         }
     }
 
-    /// Renders the user interface.
-    ///
-    /// This is where you add new widgets. See the following resources for more information:
-    ///
-    /// - <https://docs.rs/ratatui/latest/ratatui/widgets/index.html>
-    /// - <https://github.com/ratatui/ratatui/tree/main/ratatui-widgets/examples>
-
     fn kill_prompt_line(&self) -> Line {
-        if let Some(item) = &self.kill_process_item {
+        if let Some(item) = &self.kill_process.item {
             let title = format!(
                 "Kill {} {:?} port {} ?",
                 item.process_name, item.port_state, item.port,
@@ -390,7 +371,7 @@ impl App {
         }
     }
     fn kill_prompt_description(&self) -> Line {
-        if let Some(item) = &self.kill_process_item {
+        if let Some(item) = &self.kill_process.item {
             let s = format!(
                 "Ending this process may disrupt services using port {}. Proceeding could result in data loss, network issues, or system instability.",
                 item.port,
@@ -401,7 +382,7 @@ impl App {
         }
     }
     fn render_kill_popup(&mut self, frame: &mut Frame, area: Rect) {
-        if self.kill_process_display {
+        if self.kill_process.display {
             let block = Block::bordered()
                 .border_type(BorderType::Plain)
                 .border_style(Style::new().fg(self.theme.table.footer_border_color))
@@ -460,25 +441,23 @@ impl App {
                 .flex(Flex::Center)
                 .split(chunks[4]);
 
-            //
-
             let kill_button = Paragraph::new("Kill")
                 .alignment(ratatui::layout::Alignment::Center)
-                .block(match self.kill_process_focused_action {
-                    KillProcessAction::Kill => Block::bordered()
+                .block(match self.kill_process.action {
+                    KillAction::Kill => Block::bordered()
                         .border_type(BorderType::Plain)
                         .border_style(Style::new().fg(tailwind::RED.c400)),
-                    KillProcessAction::Close => Block::bordered()
+                    KillAction::Cancel => Block::bordered()
                         .border_type(BorderType::Plain)
                         .border_style(Style::new().fg(tailwind::GRAY.c400)),
                 });
             let cancel_button = Paragraph::new("Cancel")
                 .alignment(ratatui::layout::Alignment::Center)
-                .block(match self.kill_process_focused_action {
-                    KillProcessAction::Close => Block::bordered()
+                .block(match self.kill_process.action {
+                    KillAction::Cancel => Block::bordered()
                         .border_type(BorderType::Plain)
                         .border_style(Style::new().fg(tailwind::RED.c400)),
-                    KillProcessAction::Kill => Block::bordered()
+                    KillAction::Kill => Block::bordered()
                         .border_type(BorderType::Plain)
                         .border_style(Style::new().fg(tailwind::GRAY.c400)),
                 });
