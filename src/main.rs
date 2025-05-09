@@ -26,23 +26,27 @@ use std::{sync::mpsc, thread, time};
 
 const ITEM_HEIGHT: u16 = 1;
 
-fn main() -> color_eyre::Result<()> {
-    color_eyre::install()?;
-
+fn bootstrap() -> Result<()> {
     let (event_tx, event_rx) = mpsc::channel::<MultithreadingEvent>();
     let tx_to_input_events = event_tx.clone();
+    let tx_to_background_thread = event_tx.clone();
+
     thread::spawn(move || {
         handle_input_events(tx_to_input_events);
     });
-    let tx_to_background_thread = event_tx.clone();
     thread::spawn(move || {
         run_background_thread(tx_to_background_thread);
     });
 
     let terminal = ratatui::init();
     let result = App::new().run(terminal, event_rx);
+
     ratatui::restore();
     result
+}
+fn main() -> Result<()> {
+    color_eyre::install()?;
+    bootstrap()
 }
 
 /// The main application which holds the state and logic of the application.
@@ -90,18 +94,6 @@ fn run_background_thread(tx: mpsc::Sender<MultithreadingEvent>) {
         tx.send(event).unwrap();
 
         thread::sleep(time::Duration::from_millis(1_000));
-    }
-}
-
-impl PortInfo {
-    pub fn ref_array(&self) -> Vec<String> {
-        vec![
-            self.port.to_string(),
-            self.pid.to_string(),
-            self.process_name.clone(),
-            self.process_path.clone(),
-            format!("{:?}", self.port_state),
-        ]
     }
 }
 
@@ -160,7 +152,6 @@ impl App {
         }
     }
     fn render(&mut self, frame: &mut Frame) {
-        // self.set_colors();
         let area = frame.area();
 
         if !self.search.display {

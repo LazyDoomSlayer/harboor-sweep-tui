@@ -12,6 +12,17 @@ pub struct PortInfo {
     pub process_path: String,
     pub port_state: ProcessPortState,
 }
+impl PortInfo {
+    pub fn ref_array(&self) -> Vec<String> {
+        vec![
+            self.port.to_string(),
+            self.pid.to_string(),
+            self.process_name.clone(),
+            self.process_path.clone(),
+            format!("{:?}", self.port_state),
+        ]
+    }
+}
 
 #[derive(serde::Serialize, Debug)]
 pub struct KillProcessResponse {
