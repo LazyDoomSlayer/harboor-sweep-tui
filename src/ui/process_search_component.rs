@@ -34,6 +34,14 @@ impl ProcessSearchComponent {
         self.cursor_index = 0;
     }
 
+    pub fn toggle(&mut self) {
+        self.display = !self.display;
+
+        if self.display {
+            self.clear();
+        }
+    }
+
     /// Clamps a proposed cursor position to valid range
     fn clamp_cursor(&self, pos: usize) -> usize {
         pos.clamp(0, self.value.chars().count())
