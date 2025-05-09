@@ -1,7 +1,5 @@
 pub mod common;
-pub use common::{
-    KillProcessResponse, PortInfo, ProcessInfo, ProcessInfoResponse, ProcessPortState,
-};
+pub use common::{KillProcessResponse, PortInfo, ProcessPortState};
 
 #[cfg(target_family = "unix")]
 mod unix;

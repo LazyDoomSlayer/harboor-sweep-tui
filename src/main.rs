@@ -98,7 +98,7 @@ fn run_background_thread(tx: mpsc::Sender<MultithreadingEvent>) {
 }
 
 #[derive(Debug, Default)]
-enum ApplicationMode {
+pub enum ApplicationMode {
     #[default]
     Normal,
     Editing,
