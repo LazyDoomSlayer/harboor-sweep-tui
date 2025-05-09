@@ -3,6 +3,7 @@ mod ui;
 mod util;
 
 use crate::model::{KillProcessResponse, PortInfo, os};
+use crate::ui::keybindings_component::KeybindingsComponent;
 use crate::ui::process_search_component::ProcessSearchComponent;
 use crate::ui::process_table_component::ProcessTableComponent;
 
@@ -114,14 +115,15 @@ pub struct App {
     // Search component
     pub search: ProcessSearchComponent,
     pub table: ProcessTableComponent,
+    pub keybindings: KeybindingsComponent,
 
     // Help Widget
-    keybindings: Vec<Keybinding>,
-    keybindings_display: bool,
-    keybindings_table_state: TableState,
-    keybindings_table_scroll_state: ScrollbarState,
-    keybindings_table_visible_rows: usize,
-    keybindings_table_longest_item_lens: (u16, u16),
+    // keybindings: Vec<Keybinding>,
+    // keybindings_display: bool,
+    // keybindings_table_state: TableState,
+    // keybindings_table_scroll_state: ScrollbarState,
+    // keybindings_table_visible_rows: usize,
+    // keybindings_table_longest_item_lens: (u16, u16),
     // Kill Widget
     kill_process_display: bool,
     kill_process_item: Option<PortInfo>,
@@ -198,18 +200,10 @@ impl App {
         Self {
             application_mode: ApplicationMode::Normal,
 
-            // Process Search Component
             search: ProcessSearchComponent::default(),
             table: ProcessTableComponent::default(),
-            // Help Widget
-            keybindings: Self::init_keybindings(),
-            keybindings_display: false,
-            keybindings_table_state: TableState::default(),
-            keybindings_table_scroll_state: ScrollbarState::new((1 * ITEM_HEIGHT) as usize),
-            keybindings_table_visible_rows: 0,
-            keybindings_table_longest_item_lens: keybindings_constraint_len_calculator(
-                &*Self::init_keybindings(),
-            ),
+            keybindings: KeybindingsComponent::default(),
+
             // Kill Widget
             kill_process_display: false,
             kill_process_item: None,
@@ -222,140 +216,7 @@ impl App {
             theme_table_color_index: 0,
         }
     }
-    fn init_keybindings() -> Vec<Keybinding> {
-        vec![
-            Keybinding {
-                combo: "Esc / q / Ctrl+C".into(),
-                description: "Quit the application".into(),
-            },
-            Keybinding {
-                combo: "Ctrl+F".into(),
-                description: "Toggle the search input".into(),
-            },
-            Keybinding {
-                combo: "F1 / ?".into(),
-                description: "Show or hide this help dialog".into(),
-            },
-            Keybinding {
-                combo: "j / ↓".into(),
-                description: "Move selection down".into(),
-            },
-            Keybinding {
-                combo: "k / ↑".into(),
-                description: "Move selection up".into(),
-            },
-            Keybinding {
-                combo: "PageDown".into(),
-                description: "Page down".into(),
-            },
-            Keybinding {
-                combo: "PageUp".into(),
-                description: "Page up".into(),
-            },
-            Keybinding {
-                combo: "Shift+PageDown".into(),
-                description: "Jump to last item".into(),
-            },
-            Keybinding {
-                combo: "Shift+PageUp".into(),
-                description: "Jump to first item".into(),
-            },
-            Keybinding {
-                combo: "Shift+Right / l".into(),
-                description: "Next color theme".into(),
-            },
-            Keybinding {
-                combo: "Shift+Left / h".into(),
-                description: "Previous color theme".into(),
-            },
-            Keybinding {
-                combo: "e".into(),
-                description: "Enter editing mode".into(),
-            },
-        ]
-    }
 
-    /// Table list
-
-    // keybindings
-    pub fn keybindings_table_next_row(&mut self) {
-        let i = match self.keybindings_table_state.selected() {
-            Some(i) => {
-                if i >= self.keybindings.len() - 1 {
-                    0
-                } else {
-                    i + 1
-                }
-            }
-            None => 0,
-        };
-        self.keybindings_table_state.select(Some(i));
-        self.keybindings_table_scroll_state = self
-            .keybindings_table_scroll_state
-            .position(i * ITEM_HEIGHT as usize);
-    }
-    pub fn keybindings_table_previous_row(&mut self) {
-        let i = match self.keybindings_table_state.selected() {
-            Some(i) => {
-                if i == 0 {
-                    self.keybindings.len() - 1
-                } else {
-                    i - 1
-                }
-            }
-            None => 0,
-        };
-        self.keybindings_table_state.select(Some(i));
-        self.keybindings_table_scroll_state = self
-            .keybindings_table_scroll_state
-            .position(i * ITEM_HEIGHT as usize);
-    }
-    pub fn keybindings_table_go_to_first(&mut self) {
-        if !self.keybindings.is_empty() {
-            self.keybindings_table_state.select(Some(0));
-            self.keybindings_table_scroll_state = self.keybindings_table_scroll_state.position(0);
-        }
-    }
-    pub fn keybindings_table_go_to_last(&mut self) {
-        let len = self.keybindings.len();
-        if len > 0 {
-            let last = len - 1;
-            self.keybindings_table_state.select(Some(last));
-            self.keybindings_table_scroll_state = self
-                .keybindings_table_scroll_state
-                .position(last * ITEM_HEIGHT as usize);
-        }
-    }
-    pub fn keybindings_table_page_down(&mut self) {
-        let len = self.keybindings.len();
-        if len == 0 {
-            return;
-        }
-
-        let current = self.keybindings_table_state.selected().unwrap_or(0);
-        // move down by one screenful, clamped to last row
-        let new = (current + self.keybindings_table_visible_rows).min(len - 1);
-
-        self.keybindings_table_state.select(Some(new));
-        self.keybindings_table_scroll_state = self
-            .keybindings_table_scroll_state
-            .position(new * ITEM_HEIGHT as usize);
-    }
-    pub fn keybindings_table_page_up(&mut self) {
-        let len = self.keybindings.len();
-        if len == 0 {
-            return;
-        }
-
-        let current = self.keybindings_table_state.selected().unwrap_or(0);
-        // move up by one screenful, clamped at zero
-        let new = current.saturating_sub(self.keybindings_table_visible_rows);
-
-        self.keybindings_table_state.select(Some(new));
-        self.keybindings_table_scroll_state = self
-            .keybindings_table_scroll_state
-            .position(new * ITEM_HEIGHT as usize);
-    }
     pub fn next_color(&mut self) {
         self.theme_table_color_index = (self.theme_table_color_index + 1) % PALETTES.len();
     }
@@ -390,6 +251,39 @@ impl App {
             terminal.draw(|frame| self.render(frame))?;
         }
     }
+    fn render(&mut self, frame: &mut Frame) {
+        self.set_colors();
+        let area = frame.area();
+
+        if !self.search.display {
+            let [table_area] = Layout::vertical([Constraint::Min(1)]).areas(area);
+            self.table.visible_rows = table_area.height as usize - 1;
+            self.table
+                .render(frame, table_area, &self.theme_table_colors);
+            self.render_scrollbar(frame, table_area);
+        } else {
+            let [input_area, table_area] =
+                Layout::vertical([Constraint::Length(3), Constraint::Min(1)]).areas(area);
+
+            self.table.visible_rows = table_area.height as usize - 1;
+
+            self.search.render(
+                frame,
+                input_area,
+                &self.theme_table_colors,
+                &self.application_mode,
+            );
+            self.table
+                .render(frame, table_area, &self.theme_table_colors);
+            self.render_scrollbar(frame, table_area);
+        }
+
+        if self.keybindings.display {
+            self.keybindings
+                .render(frame, area, &self.theme_table_colors);
+        }
+        self.render_kill_popup(frame, area);
+    }
 
     fn update_filtered_processes(&mut self) {
         let q = self.search.value.to_lowercase();
@@ -406,6 +300,25 @@ impl App {
             .collect();
 
         self.table.set_items(self.processes_filtered.clone());
+    }
+
+    fn toggle_processes_search_display(&mut self) {
+        self.search.toggle();
+
+        if self.search.display {
+            self.application_mode = ApplicationMode::Editing;
+        } else {
+            self.application_mode = ApplicationMode::Normal;
+        }
+    }
+    fn toggle_keybindings_display(&mut self) {
+        self.keybindings.display = !self.keybindings.display;
+
+        if self.keybindings.display {
+            self.application_mode = ApplicationMode::Helping;
+        } else {
+            self.application_mode = ApplicationMode::Normal;
+        }
     }
 
     fn handle_key_event(&mut self, key: KeyEvent) -> Result<AppControlFlow> {
@@ -426,46 +339,6 @@ impl App {
         }
     }
 
-    fn handle_killing_mode_key(&mut self, key: KeyEvent) {
-        match (key.modifiers, key.code) {
-            (KeyModifiers::NONE, KeyCode::Left) => {
-                self.kill_process_focused_action = KillProcessAction::Kill;
-            }
-            (KeyModifiers::NONE, KeyCode::Right) => {
-                self.kill_process_focused_action = KillProcessAction::Close;
-            }
-            (KeyModifiers::NONE, KeyCode::Enter) => {
-                match self.kill_process_focused_action {
-                    KillProcessAction::Kill => {
-                        if let Some(item) = self.kill_process_item.take() {
-                            os::kill_process(item.pid);
-                        }
-                    }
-                    KillProcessAction::Close => {
-                        self.kill_process_item.take();
-                    }
-                }
-                self.kill_process_display = false;
-                self.application_mode = ApplicationMode::Normal;
-            }
-            (KeyModifiers::NONE, KeyCode::Esc) => {
-                self.kill_process_display = false;
-                self.application_mode = ApplicationMode::Normal;
-                self.kill_process_item.take();
-            }
-            _ => {}
-        }
-    }
-
-    fn toggle_processes_search_display(&mut self) {
-        self.search.toggle();
-
-        if self.search.display {
-            self.application_mode = ApplicationMode::Editing;
-        } else {
-            self.application_mode = ApplicationMode::Normal;
-        }
-    }
     fn handle_normal_mode_key(&mut self, key: KeyEvent) -> Result<AppControlFlow> {
         match (key.modifiers, key.code) {
             // Quit from application
@@ -479,13 +352,7 @@ impl App {
                 self.toggle_processes_search_display()
             }
             (KeyModifiers::NONE, KeyCode::F(1)) | (_, KeyCode::Char('?')) => {
-                self.keybindings_display = !self.keybindings_display;
-
-                if self.keybindings_display {
-                    self.application_mode = ApplicationMode::Helping;
-                } else {
-                    self.application_mode = ApplicationMode::Normal;
-                }
+                self.toggle_keybindings_display();
             }
             // Modify Search input mode
             (KeyModifiers::NONE, KeyCode::Char('e')) => {
@@ -528,20 +395,15 @@ impl App {
             (KeyModifiers::NONE, KeyCode::Esc)
             | (KeyModifiers::NONE, KeyCode::F(1))
             | (_, KeyCode::Char('?')) => {
-                self.keybindings_display = !self.keybindings_display;
-                if self.keybindings_display {
-                    self.application_mode = ApplicationMode::Helping;
-                } else {
-                    self.application_mode = ApplicationMode::Normal;
-                }
+                self.toggle_keybindings_display();
             }
             // Navigate in the list
-            (KeyModifiers::SHIFT, KeyCode::PageUp) => self.keybindings_table_go_to_first(),
-            (KeyModifiers::SHIFT, KeyCode::PageDown) => self.keybindings_table_go_to_last(),
-            (KeyModifiers::NONE, KeyCode::PageUp) => self.keybindings_table_page_up(),
-            (KeyModifiers::NONE, KeyCode::PageDown) => self.keybindings_table_page_down(),
-            (KeyModifiers::NONE, KeyCode::Down) => self.keybindings_table_next_row(),
-            (KeyModifiers::NONE, KeyCode::Up) => self.keybindings_table_previous_row(),
+            (KeyModifiers::SHIFT, KeyCode::PageUp) => self.keybindings.first_row(),
+            (KeyModifiers::SHIFT, KeyCode::PageDown) => self.keybindings.last_row(),
+            (KeyModifiers::NONE, KeyCode::PageUp) => self.keybindings.page_up(),
+            (KeyModifiers::NONE, KeyCode::PageDown) => self.keybindings.page_down(),
+            (KeyModifiers::NONE, KeyCode::Down) => self.keybindings.next_row(),
+            (KeyModifiers::NONE, KeyCode::Up) => self.keybindings.previous_row(),
 
             _ => {}
         }
@@ -565,6 +427,36 @@ impl App {
             _ => {}
         }
     }
+    fn handle_killing_mode_key(&mut self, key: KeyEvent) {
+        match (key.modifiers, key.code) {
+            (KeyModifiers::NONE, KeyCode::Left) => {
+                self.kill_process_focused_action = KillProcessAction::Kill;
+            }
+            (KeyModifiers::NONE, KeyCode::Right) => {
+                self.kill_process_focused_action = KillProcessAction::Close;
+            }
+            (KeyModifiers::NONE, KeyCode::Enter) => {
+                match self.kill_process_focused_action {
+                    KillProcessAction::Kill => {
+                        if let Some(item) = self.kill_process_item.take() {
+                            os::kill_process(item.pid);
+                        }
+                    }
+                    KillProcessAction::Close => {
+                        self.kill_process_item.take();
+                    }
+                }
+                self.kill_process_display = false;
+                self.application_mode = ApplicationMode::Normal;
+            }
+            (KeyModifiers::NONE, KeyCode::Esc) => {
+                self.kill_process_display = false;
+                self.application_mode = ApplicationMode::Normal;
+                self.kill_process_item.take();
+            }
+            _ => {}
+        }
+    }
 
     /// Renders the user interface.
     ///
@@ -572,36 +464,6 @@ impl App {
     ///
     /// - <https://docs.rs/ratatui/latest/ratatui/widgets/index.html>
     /// - <https://github.com/ratatui/ratatui/tree/main/ratatui-widgets/examples>
-    fn render(&mut self, frame: &mut Frame) {
-        self.set_colors();
-        let area = frame.area();
-
-        if !self.search.display {
-            let [table_area] = Layout::vertical([Constraint::Min(1)]).areas(area);
-            self.table.visible_rows = table_area.height as usize - 1;
-            self.table
-                .render(frame, table_area, &self.theme_table_colors);
-            self.render_scrollbar(frame, table_area);
-        } else {
-            let [input_area, table_area] =
-                Layout::vertical([Constraint::Length(3), Constraint::Min(1)]).areas(area);
-
-            self.table.visible_rows = table_area.height as usize - 1;
-
-            self.search.render(
-                frame,
-                input_area,
-                &self.theme_table_colors,
-                &self.application_mode,
-            );
-            self.table
-                .render(frame, table_area, &self.theme_table_colors);
-            self.render_scrollbar(frame, table_area);
-        }
-
-        self.render_keybindings_popup(frame, area);
-        self.render_kill_popup(frame, area);
-    }
 
     fn kill_prompt_line(&self) -> Line {
         if let Some(item) = &self.kill_process_item {
@@ -711,104 +573,6 @@ impl App {
             frame.render_widget(cancel_button, buttons[1]);
         }
     }
-    fn render_keybindings_popup(&mut self, frame: &mut Frame, area: Rect) {
-        if self.keybindings_display {
-            let selected_row_style = Style::default()
-                .add_modifier(Modifier::REVERSED)
-                .fg(self.theme_table_colors.selected_row_style_fg);
-            let selected_cell_style = Style::default()
-                .add_modifier(Modifier::REVERSED)
-                .fg(self.theme_table_colors.selected_cell_style_fg);
-
-            let combo_style = Style::new()
-                .fg(self.theme_table_colors.selected_row_style_fg)
-                .bg(self.theme_table_colors.buffer_bg);
-            let desc_style = Style::new()
-                .fg(self.theme_table_colors.row_fg)
-                .bg(self.theme_table_colors.buffer_bg);
-
-            let rows = self.keybindings.iter().map(|kb| {
-                // build each row by styling its cells individually
-                let cells = kb
-                    .ref_array()
-                    .into_iter()
-                    .enumerate()
-                    .map(|(col_idx, content)| {
-                        let cell = Cell::from(Text::from(content));
-                        if col_idx == 0 {
-                            cell.style(combo_style)
-                        } else {
-                            cell.style(desc_style)
-                        }
-                    });
-                Row::new(cells).height(ITEM_HEIGHT)
-            });
-
-            let table = Table::new(
-                rows,
-                [
-                    Constraint::Length(self.keybindings_table_longest_item_lens.0 + 1),
-                    Constraint::Min(self.keybindings_table_longest_item_lens.1),
-                ],
-            )
-            .row_highlight_style(selected_row_style)
-            .cell_highlight_style(selected_cell_style)
-            .bg(self.theme_table_colors.buffer_bg)
-            .highlight_spacing(HighlightSpacing::Always)
-            .block(
-                Block::bordered()
-                    .border_type(BorderType::Plain)
-                    .border_style(Style::new().fg(self.theme_table_colors.footer_border_color))
-                    .title("Keybindings"),
-            );
-
-            let area = popup_area(area, 4, 5);
-            self.keybindings_table_visible_rows = area.height as usize - 1;
-            frame.render_widget(Clear, area);
-            frame.render_stateful_widget(table, area, &mut self.keybindings_table_state);
-
-            frame.render_stateful_widget(
-                Scrollbar::default()
-                    .orientation(ScrollbarOrientation::VerticalRight)
-                    .begin_symbol(None)
-                    .end_symbol(None),
-                area.inner(Margin {
-                    vertical: 1,
-                    horizontal: 1,
-                }),
-                &mut self.keybindings_table_scroll_state,
-            );
-        }
-    }
-
-    // fn render_search(&mut self, frame: &mut Frame, area: Rect) {
-    //     let input = Paragraph::new(self.processes_search_input.as_str())
-    //         .style(
-    //             Style::default()
-    //                 .fg(self.theme_table_colors.row_fg)
-    //                 .bg(self.theme_table_colors.buffer_bg),
-    //         )
-    //         .block(
-    //             Block::bordered()
-    //                 .border_type(BorderType::Plain)
-    //                 .border_style(Style::new().fg(self.theme_table_colors.footer_border_color))
-    //                 .title("Search"),
-    //         );
-    //
-    //     frame.render_widget(input, area);
-    //
-    //     match self.application_mode {
-    //         #[allow(clippy::cast_possible_truncation)]
-    //         ApplicationMode::Editing => frame.set_cursor_position(Position::new(
-    //             // Draw the cursor at the current position in the input field.
-    //             // This position is can be controlled via the left and right arrow key
-    //             area.x + self.processes_search_input_index as u16 + 1,
-    //             // Move one line down, from the border to the input line
-    //             area.y + 1,
-    //         )),
-    //         _ => {}
-    //     }
-    // }
 
     fn render_scrollbar(&mut self, frame: &mut Frame, area: Rect) {
         frame.render_stateful_widget(
@@ -823,50 +587,6 @@ impl App {
             &mut self.table.scroll,
         );
     }
-    // fn render_footer(&self, frame: &mut Frame, area: Rect) {
-    //     let info_footer = Paragraph::new(Text::from_iter(INFO_TEXT))
-    //         .style(
-    //             Style::new()
-    //                 .fg(self.theme_table_colors.row_fg)
-    //                 .bg(self.theme_table_colors.buffer_bg),
-    //         )
-    //         .centered()
-    //         .block(
-    //             Block::bordered()
-    //                 .border_type(BorderType::Plain)
-    //                 .border_style(Style::new().fg(self.theme_table_colors.footer_border_color)),
-    //         );
-    //     frame.render_widget(info_footer, area);
-    // }
-
-    //
-    // fn draw_process_list(&self, frame: &mut Frame, area: Rect) {
-    //     // Build your ListItem vec
-    //     let processes_listed: Vec<ListItem> = self
-    //         .processes
-    //         .iter()
-    //         .enumerate()
-    //         .map(|(i, proc)| {
-    //             // one Line for the header…
-    //             // let header: Line = Line::from(vec![
-    //             // ]);
-    //
-    //             // …and one Line for the details
-    //             let details: Line = Line::from(vec![
-    //                 Span::raw(format!("{}", proc.pid)),
-    //                 Span::raw(format!("{}", proc.port)),
-    //                 Span::raw(format!("{}", proc.process_path)),
-    //                 Span::raw(format!("{:?}", proc.port_state)),
-    //             ]);
-    //
-    //             ListItem::new(vec![details])
-    //         })
-    //         .collect();
-    //
-    //     let processes_widget =
-    //         List::new(processes_listed).block(Block::bordered().title("Processes"));
-    //     frame.render_widget(processes_widget, area);
-    // }
 
     fn monitor_ports_loop(&mut self) {
         match os::fetch_ports() {
