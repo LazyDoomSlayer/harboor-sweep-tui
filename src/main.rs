@@ -1,7 +1,9 @@
 mod model;
+mod ui;
 mod util;
 
 use crate::model::{KillProcessResponse, PortInfo, os};
+use crate::ui::process_search_component::ProcessSearchComponent;
 use crate::util::{keybindings_constraint_len_calculator, popup_area};
 
 use color_eyre::Result;
@@ -111,12 +113,10 @@ enum KillProcessAction {
 /// The main application which holds the state and logic of the application.
 #[derive(Debug, Default)]
 pub struct App {
-    application_mode: ApplicationMode,
+    pub application_mode: ApplicationMode,
 
-    // Search widget
-    processes_search_input: String,
-    processes_search_input_index: usize,
-    processes_search_display: bool,
+    // Search component
+    pub search: ProcessSearchComponent,
     // Help Widget
     keybindings: Vec<Keybinding>,
     keybindings_display: bool,
@@ -203,11 +203,10 @@ impl App {
     /// Construct a new instance of [`App`].
     pub fn new() -> Self {
         Self {
-            // Search widget
-            processes_search_input: String::new(),
-            processes_search_input_index: 0,
             application_mode: ApplicationMode::Normal,
-            processes_search_display: false,
+
+            // Process Search Component
+            search: ProcessSearchComponent::default(),
             // Help Widget
             keybindings: Self::init_keybindings(),
             keybindings_display: false,
@@ -481,7 +480,7 @@ impl App {
     }
 
     fn update_filtered_processes(&mut self) {
-        let q = self.processes_search_input.to_lowercase();
+        let q = self.search.value.to_lowercase();
         self.processes_filtered = self
             .processes
             .iter()
@@ -503,7 +502,7 @@ impl App {
                 Ok(AppControlFlow::Continue)
             }
             ApplicationMode::Editing => {
-                self.handle_editing_mode_key(key);
+                // self.handle_editing_mode_key(key);
                 Ok(AppControlFlow::Continue)
             }
             ApplicationMode::Helping => {
@@ -553,14 +552,14 @@ impl App {
                 return Ok(AppControlFlow::Exit);
             }
             // Toggle UI elements
-            (KeyModifiers::CONTROL, KeyCode::Char('f' | 'F')) => {
-                self.processes_search_display = !self.processes_search_display;
-                self.clear_input();
-
-                if self.processes_search_display {
-                    self.application_mode = ApplicationMode::Editing;
-                }
-            }
+            // (KeyModifiers::CONTROL, KeyCode::Char('f' | 'F')) => {
+            //     self.processes_search_display = !self.processes_search_display;
+            //     self.clear_input();
+            //
+            //     if self.processes_search_display {
+            //         self.application_mode = ApplicationMode::Editing;
+            //     }
+            // }
             (KeyModifiers::NONE, KeyCode::F(1)) | (_, KeyCode::Char('?')) => {
                 self.keybindings_display = !self.keybindings_display;
 
@@ -631,34 +630,34 @@ impl App {
             _ => {}
         }
     }
-    fn handle_editing_mode_key(&mut self, key: KeyEvent) {
-        match key.code {
-            KeyCode::Char(to_insert) => self.enter_char(to_insert),
-            KeyCode::Backspace => self.delete_char(),
-            KeyCode::Left => self.move_cursor_left(),
-            KeyCode::Right => self.move_cursor_right(),
-            KeyCode::Down => {
-                self.application_mode = ApplicationMode::Normal;
-                self.processes_table_next_row()
-            }
-            KeyCode::Up => {
-                self.application_mode = ApplicationMode::Normal;
-                self.processes_table_previous_row()
-            }
-            KeyCode::Esc => {
-                self.application_mode = ApplicationMode::Normal;
-                self.processes_search_display = !self.processes_search_display;
-
-                self.clear_input();
-
-                if self.processes_search_display {
-                    self.application_mode = ApplicationMode::Editing;
-                }
-            }
-
-            _ => {}
-        }
-    }
+    // fn handle_editing_mode_key(&mut self, key: KeyEvent) {
+    //     match key.code {
+    //         KeyCode::Char(to_insert) => self.enter_char(to_insert),
+    //         KeyCode::Backspace => self.delete_char(),
+    //         KeyCode::Left => self.move_cursor_left(),
+    //         KeyCode::Right => self.move_cursor_right(),
+    //         KeyCode::Down => {
+    //             self.application_mode = ApplicationMode::Normal;
+    //             self.processes_table_next_row()
+    //         }
+    //         KeyCode::Up => {
+    //             self.application_mode = ApplicationMode::Normal;
+    //             self.processes_table_previous_row()
+    //         }
+    //         KeyCode::Esc => {
+    //             self.application_mode = ApplicationMode::Normal;
+    //             self.processes_search_display = !self.processes_search_display;
+    //
+    //             self.clear_input();
+    //
+    //             if self.processes_search_display {
+    //                 self.application_mode = ApplicationMode::Editing;
+    //             }
+    //         }
+    //
+    //         _ => {}
+    //     }
+    // }
 
     /// Renders the user interface.
     ///
@@ -670,7 +669,7 @@ impl App {
         self.set_colors();
         let area = frame.area();
 
-        if !self.processes_search_display {
+        if !self.search.display {
             let [table_area] = Layout::vertical([Constraint::Min(1)]).areas(area);
             self.processes_table_visible_rows = table_area.height as usize - 1;
             self.render_table(frame, table_area);
@@ -681,7 +680,12 @@ impl App {
 
             self.processes_table_visible_rows = table_area.height as usize - 1;
 
-            self.render_search(frame, input_area);
+            self.search.render(
+                frame,
+                input_area,
+                &self.theme_table_colors,
+                &self.application_mode,
+            );
             self.render_table(frame, table_area);
             self.render_scrollbar(frame, table_area);
         }
@@ -868,34 +872,34 @@ impl App {
         }
     }
 
-    fn render_search(&mut self, frame: &mut Frame, area: Rect) {
-        let input = Paragraph::new(self.processes_search_input.as_str())
-            .style(
-                Style::default()
-                    .fg(self.theme_table_colors.row_fg)
-                    .bg(self.theme_table_colors.buffer_bg),
-            )
-            .block(
-                Block::bordered()
-                    .border_type(BorderType::Plain)
-                    .border_style(Style::new().fg(self.theme_table_colors.footer_border_color))
-                    .title("Search"),
-            );
-
-        frame.render_widget(input, area);
-
-        match self.application_mode {
-            #[allow(clippy::cast_possible_truncation)]
-            ApplicationMode::Editing => frame.set_cursor_position(Position::new(
-                // Draw the cursor at the current position in the input field.
-                // This position is can be controlled via the left and right arrow key
-                area.x + self.processes_search_input_index as u16 + 1,
-                // Move one line down, from the border to the input line
-                area.y + 1,
-            )),
-            _ => {}
-        }
-    }
+    // fn render_search(&mut self, frame: &mut Frame, area: Rect) {
+    //     let input = Paragraph::new(self.processes_search_input.as_str())
+    //         .style(
+    //             Style::default()
+    //                 .fg(self.theme_table_colors.row_fg)
+    //                 .bg(self.theme_table_colors.buffer_bg),
+    //         )
+    //         .block(
+    //             Block::bordered()
+    //                 .border_type(BorderType::Plain)
+    //                 .border_style(Style::new().fg(self.theme_table_colors.footer_border_color))
+    //                 .title("Search"),
+    //         );
+    //
+    //     frame.render_widget(input, area);
+    //
+    //     match self.application_mode {
+    //         #[allow(clippy::cast_possible_truncation)]
+    //         ApplicationMode::Editing => frame.set_cursor_position(Position::new(
+    //             // Draw the cursor at the current position in the input field.
+    //             // This position is can be controlled via the left and right arrow key
+    //             area.x + self.processes_search_input_index as u16 + 1,
+    //             // Move one line down, from the border to the input line
+    //             area.y + 1,
+    //         )),
+    //         _ => {}
+    //     }
+    // }
 
     fn render_table(&mut self, frame: &mut Frame, area: Rect) {
         let header_style = Style::default()
@@ -1014,65 +1018,6 @@ impl App {
     //         List::new(processes_listed).block(Block::bordered().title("Processes"));
     //     frame.render_widget(processes_widget, area);
     // }
-
-    fn clear_input(&mut self) {
-        self.processes_search_input.clear();
-        self.processes_search_input_index = 0;
-        self.update_filtered_processes();
-    }
-
-    fn clamp_cursor(&self, new_cursor_pos: usize) -> usize {
-        new_cursor_pos.clamp(0, self.processes_search_input.chars().count())
-    }
-    fn move_cursor_left(&mut self) {
-        let cursor_moved_left = self.processes_search_input_index.saturating_sub(1);
-        self.processes_search_input_index = self.clamp_cursor(cursor_moved_left);
-    }
-
-    fn move_cursor_right(&mut self) {
-        let cursor_moved_right = self.processes_search_input_index.saturating_add(1);
-        self.processes_search_input_index = self.clamp_cursor(cursor_moved_right);
-    }
-
-    fn byte_index(&self) -> usize {
-        self.processes_search_input
-            .char_indices()
-            .map(|(i, _)| i)
-            .nth(self.processes_search_input_index)
-            .unwrap_or(self.processes_search_input.len())
-    }
-    fn enter_char(&mut self, new_char: char) {
-        let index = self.byte_index();
-        self.processes_search_input.insert(index, new_char);
-        self.move_cursor_right();
-        self.update_filtered_processes();
-    }
-    fn delete_char(&mut self) {
-        let is_not_cursor_leftmost = self.processes_search_input_index != 0;
-        if is_not_cursor_leftmost {
-            // Method "remove" is not used on the saved text for deleting the selected char.
-            // Reason: Using remove on String works on bytes instead of the chars.
-            // Using remove would require special care because of char boundaries.
-
-            let current_index = self.processes_search_input_index;
-            let from_left_to_current_index = current_index - 1;
-
-            // Getting all characters before the selected character.
-            let before_char_to_delete = self
-                .processes_search_input
-                .chars()
-                .take(from_left_to_current_index);
-            // Getting all characters after selected character.
-            let after_char_to_delete = self.processes_search_input.chars().skip(current_index);
-
-            // Put all characters together except the selected one.
-            // By leaving the selected one out, it is forgotten and therefore deleted.
-            self.processes_search_input =
-                before_char_to_delete.chain(after_char_to_delete).collect();
-            self.move_cursor_left();
-            self.update_filtered_processes();
-        }
-    }
 
     fn monitor_ports_loop(&mut self) {
         match os::fetch_ports() {
