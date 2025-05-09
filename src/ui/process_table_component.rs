@@ -1,5 +1,6 @@
 use crate::model::PortInfo;
-use crate::{ITEM_HEIGHT, TableColors};
+use crate::ui::theme::TableColors;
+
 use ratatui::{
     Frame,
     layout::{Constraint, Margin, Rect},

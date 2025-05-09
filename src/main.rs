@@ -2,66 +2,28 @@ mod model;
 mod ui;
 mod util;
 
-use crate::model::{KillProcessResponse, PortInfo, os};
+use crate::model::{PortInfo, os};
 use crate::ui::keybindings_component::KeybindingsComponent;
 use crate::ui::process_search_component::ProcessSearchComponent;
 use crate::ui::process_table_component::ProcessTableComponent;
+use crate::ui::theme::Theme;
 
-use crate::util::{keybindings_constraint_len_calculator, popup_area};
+use crate::util::popup_area;
 
 use color_eyre::Result;
 use ratatui::{
     DefaultTerminal, Frame,
     crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
-    layout::{Constraint, Flex, Layout, Margin, Position, Rect},
-    prelude::{Color, Style},
-    style::{Modifier, Stylize, palette::tailwind},
-    text::{Line, Span, Text},
-    widgets::{
-        Block, BorderType, Cell, Clear, HighlightSpacing, Paragraph, Row, Scrollbar,
-        ScrollbarOrientation, ScrollbarState, Table, TableState,
-    },
+    layout::{Constraint, Direction, Flex, Layout, Margin, Rect},
+    prelude::Style,
+    style::{Stylize, palette::tailwind},
+    text::{Line, Span},
+    widgets::{Block, BorderType, Clear, Paragraph, Scrollbar, ScrollbarOrientation, Wrap},
 };
 
-use ratatui::layout::Direction;
-use ratatui::widgets::Wrap;
 use std::{sync::mpsc, thread, time};
-use unicode_width::UnicodeWidthStr;
-
-const PALETTES: [tailwind::Palette; 5] = [
-    tailwind::GRAY,
-    tailwind::BLUE,
-    tailwind::EMERALD,
-    tailwind::INDIGO,
-    tailwind::RED,
-];
 
 const ITEM_HEIGHT: u16 = 1;
-
-#[derive(Debug, Default)]
-struct TableColors {
-    buffer_bg: Color,
-    header_bg: Color,
-    header_fg: Color,
-    row_fg: Color,
-    selected_row_style_fg: Color,
-    selected_cell_style_fg: Color,
-    footer_border_color: Color,
-}
-
-impl TableColors {
-    const fn new(color: &tailwind::Palette) -> Self {
-        Self {
-            buffer_bg: tailwind::SLATE.c950,
-            header_bg: color.c900,
-            header_fg: tailwind::SLATE.c200,
-            row_fg: tailwind::SLATE.c200,
-            selected_row_style_fg: color.c400,
-            selected_cell_style_fg: color.c600,
-            footer_border_color: color.c400,
-        }
-    }
-}
 
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
@@ -82,24 +44,6 @@ fn main() -> color_eyre::Result<()> {
     result
 }
 
-#[derive(Debug)]
-struct Keybinding {
-    combo: String,
-    description: String,
-}
-impl Keybinding {
-    pub fn ref_array(&self) -> Vec<String> {
-        vec![self.combo.to_string(), self.description.to_string()]
-    }
-
-    fn combo(&self) -> &str {
-        &self.combo
-    }
-    fn description(&self) -> &str {
-        &self.description
-    }
-}
-
 #[derive(Debug, Default)]
 enum KillProcessAction {
     #[default]
@@ -116,14 +60,8 @@ pub struct App {
     pub search: ProcessSearchComponent,
     pub table: ProcessTableComponent,
     pub keybindings: KeybindingsComponent,
+    pub theme: Theme,
 
-    // Help Widget
-    // keybindings: Vec<Keybinding>,
-    // keybindings_display: bool,
-    // keybindings_table_state: TableState,
-    // keybindings_table_scroll_state: ScrollbarState,
-    // keybindings_table_visible_rows: usize,
-    // keybindings_table_longest_item_lens: (u16, u16),
     // Kill Widget
     kill_process_display: bool,
     kill_process_item: Option<PortInfo>,
@@ -131,10 +69,6 @@ pub struct App {
     // processes
     processes: Vec<PortInfo>,
     processes_filtered: Vec<PortInfo>,
-
-    // Theme
-    theme_table_colors: TableColors,
-    theme_table_color_index: usize,
 }
 
 enum MultithreadingEvent {
@@ -203,6 +137,7 @@ impl App {
             search: ProcessSearchComponent::default(),
             table: ProcessTableComponent::default(),
             keybindings: KeybindingsComponent::default(),
+            theme: Theme::default(),
 
             // Kill Widget
             kill_process_display: false,
@@ -211,22 +146,7 @@ impl App {
             // Processes
             processes: Vec::new(),
             processes_filtered: Vec::new(),
-            // colros
-            theme_table_colors: TableColors::new(&PALETTES[0]),
-            theme_table_color_index: 0,
         }
-    }
-
-    pub fn next_color(&mut self) {
-        self.theme_table_color_index = (self.theme_table_color_index + 1) % PALETTES.len();
-    }
-
-    pub fn previous_color(&mut self) {
-        let count = PALETTES.len();
-        self.theme_table_color_index = (self.theme_table_color_index + count - 1) % count;
-    }
-    pub fn set_colors(&mut self) {
-        self.theme_table_colors = TableColors::new(&PALETTES[self.theme_table_color_index]);
     }
 
     /// Run the application's main loop.
@@ -252,14 +172,13 @@ impl App {
         }
     }
     fn render(&mut self, frame: &mut Frame) {
-        self.set_colors();
+        // self.set_colors();
         let area = frame.area();
 
         if !self.search.display {
             let [table_area] = Layout::vertical([Constraint::Min(1)]).areas(area);
             self.table.visible_rows = table_area.height as usize - 1;
-            self.table
-                .render(frame, table_area, &self.theme_table_colors);
+            self.table.render(frame, table_area, &self.theme.table);
             self.render_scrollbar(frame, table_area);
         } else {
             let [input_area, table_area] =
@@ -267,20 +186,14 @@ impl App {
 
             self.table.visible_rows = table_area.height as usize - 1;
 
-            self.search.render(
-                frame,
-                input_area,
-                &self.theme_table_colors,
-                &self.application_mode,
-            );
-            self.table
-                .render(frame, table_area, &self.theme_table_colors);
+            self.search
+                .render(frame, input_area, &self.theme.table, &self.application_mode);
+            self.table.render(frame, table_area, &self.theme.table);
             self.render_scrollbar(frame, table_area);
         }
 
         if self.keybindings.display {
-            self.keybindings
-                .render(frame, area, &self.theme_table_colors);
+            self.keybindings.render(frame, area, &self.theme.table);
         }
         self.render_kill_popup(frame, area);
     }
@@ -381,9 +294,9 @@ impl App {
                 }
             }
             // Change theme
-            (KeyModifiers::SHIFT, KeyCode::Right) => self.next_color(),
+            (KeyModifiers::SHIFT, KeyCode::Right) => self.theme.cycle_next(),
             (KeyModifiers::SHIFT, KeyCode::Left) => {
-                self.previous_color();
+                self.theme.cycle_prev();
             }
             _ => {}
         }
@@ -491,8 +404,8 @@ impl App {
         if self.kill_process_display {
             let block = Block::bordered()
                 .border_type(BorderType::Plain)
-                .border_style(Style::new().fg(self.theme_table_colors.footer_border_color))
-                .bg(self.theme_table_colors.buffer_bg)
+                .border_style(Style::new().fg(self.theme.table.footer_border_color))
+                .bg(self.theme.table.buffer_bg)
                 .title("Kill");
 
             let area = popup_area(area, 4, 5);
@@ -517,8 +430,8 @@ impl App {
             let prompt = Paragraph::new(self.kill_prompt_line())
                 .style(
                     Style::default()
-                        .fg(self.theme_table_colors.row_fg)
-                        .bg(self.theme_table_colors.buffer_bg),
+                        .fg(self.theme.table.row_fg)
+                        .bg(self.theme.table.buffer_bg),
                 )
                 .alignment(ratatui::layout::Alignment::Center)
                 .wrap(Wrap { trim: true });
@@ -530,8 +443,8 @@ impl App {
             let prompt_description = Paragraph::new(self.kill_prompt_description())
                 .style(
                     Style::default()
-                        .fg(self.theme_table_colors.row_fg)
-                        .bg(self.theme_table_colors.buffer_bg),
+                        .fg(self.theme.table.row_fg)
+                        .bg(self.theme.table.buffer_bg),
                 )
                 .alignment(ratatui::layout::Alignment::Center)
                 .wrap(Wrap { trim: true });

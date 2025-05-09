@@ -1,4 +1,4 @@
-use crate::Keybinding;
+use crate::ui::keybindings_component::Keybinding;
 use unicode_width::UnicodeWidthStr;
 
 pub fn keybindings_constraint_len_calculator(items: &[Keybinding]) -> (u16, u16) {

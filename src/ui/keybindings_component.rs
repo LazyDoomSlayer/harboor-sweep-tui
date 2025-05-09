@@ -1,5 +1,4 @@
-use crate::Keybinding;
-use crate::TableColors;
+use crate::ui::theme::TableColors;
 use crate::util::{keybindings_constraint_len_calculator, popup_area};
 use ratatui::{
     Frame,
@@ -11,6 +10,24 @@ use ratatui::{
         ScrollbarState, Table, TableState,
     },
 };
+
+#[derive(Debug)]
+pub struct Keybinding {
+    combo: String,
+    description: String,
+}
+impl Keybinding {
+    pub fn ref_array(&self) -> Vec<String> {
+        vec![self.combo.to_string(), self.description.to_string()]
+    }
+
+    pub fn combo(&self) -> &str {
+        &self.combo
+    }
+    pub fn description(&self) -> &str {
+        &self.description
+    }
+}
 
 /// A component that handles the help/keybindings popup
 #[derive(Debug)]

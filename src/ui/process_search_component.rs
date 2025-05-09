@@ -1,4 +1,6 @@
-use crate::{ApplicationMode, TableColors};
+use crate::ApplicationMode;
+use crate::ui::theme::TableColors;
+
 use ratatui::{
     Frame,
     layout::{Position, Rect},
