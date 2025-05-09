@@ -1,8 +1,18 @@
 [package]
 name = "harboor-sweep-tui"
 version = "1.0.0"
-description = "Cross-platform tool to identify and manage active ports and their processes"
-authors = ["lukaj"]
+description = "Cross-platform tool to identify and manage active ports and their processes. Supports Linux, macOS, and Windows."
+authors = ["LazyDoomSlayer <lazydoomslayer@gmail.com>"]
+keywords = [
+    "tui", "terminal", "network", "ports", "cli",
+]
+categories = [
+    "command-line-utilities",
+    "network-programming",
+]
+repository = "https://github.com/LazyDoomSlayer/harboor-sweep-tui"
+homepage = "https://github.com/LazyDoomSlayer/harboor-sweep-tui#readme"
+readme = "README.md"
 license = "MIT"
 edition = "2024"
 
@@ -10,9 +20,6 @@ edition = "2024"
 crossterm = "0.28.1"
 ratatui = "0.29.0"
 color-eyre = "0.6.3"
-tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 windows = { version = "0.59.0", features = ["Win32_NetworkManagement_IpHelper", "Win32_System_Threading", "Win32_Foundation", "Win32_System_ProcessStatus"] }
-serde_json = "1.0.137"
 unicode-width = "0.2.0"
-itertools = "0.14.0"
