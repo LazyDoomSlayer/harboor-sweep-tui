@@ -93,7 +93,7 @@ fn run_background_thread(tx: mpsc::Sender<MultithreadingEvent>) {
         let event = MultithreadingEvent::ProccesesUpdate(Vec::new());
         tx.send(event).unwrap();
 
-        thread::sleep(time::Duration::from_millis(1_000));
+        thread::sleep(time::Duration::from_millis(5_000));
     }
 }
 
@@ -196,6 +196,7 @@ impl App {
 
     fn toggle_processes_search_display(&mut self) {
         self.search.toggle();
+        self.update_filtered_processes();
 
         if self.search.display {
             self.application_mode = ApplicationMode::Editing;
@@ -302,8 +303,14 @@ impl App {
     }
     fn handle_editing_mode_key(&mut self, key: KeyEvent) {
         match key.code {
-            KeyCode::Char(to_insert) => self.search.insert_char(to_insert),
-            KeyCode::Backspace => self.search.delete_char(),
+            KeyCode::Char(to_insert) => {
+                self.search.insert_char(to_insert);
+                self.update_filtered_processes();
+            }
+            KeyCode::Backspace => {
+                self.search.delete_char();
+                self.update_filtered_processes();
+            }
             KeyCode::Left => self.search.move_cursor_left(),
             KeyCode::Right => self.search.move_cursor_right(),
             KeyCode::Down => {

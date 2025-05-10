@@ -38,10 +38,7 @@ impl ProcessSearchComponent {
 
     pub fn toggle(&mut self) {
         self.display = !self.display;
-
-        if self.display {
-            self.clear();
-        }
+        self.clear();
     }
 
     /// Clamps a proposed cursor position to valid range
