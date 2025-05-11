@@ -1,5 +1,8 @@
+use crate::ApplicationMode;
 use crate::ui::theme::TableColors;
 use crate::util::{keybindings_constraint_len_calculator, popup_area};
+use ratatui::layout::Alignment;
+use ratatui::widgets::Paragraph;
 use ratatui::{
     Frame,
     layout::{Constraint, Margin, Rect},
@@ -11,10 +14,11 @@ use ratatui::{
     },
 };
 
+/// Represents a single key combo and its description.
 #[derive(Debug)]
 pub struct Keybinding {
-    combo: String,
-    description: String,
+    pub combo: &'static str,
+    pub description: &'static str,
 }
 impl Keybinding {
     pub fn ref_array(&self) -> Vec<String> {
@@ -29,11 +33,157 @@ impl Keybinding {
     }
 }
 
+/// Groups keybindings by application mode.
+#[derive(Debug)]
+pub struct KeybindingsGroup {
+    pub mode: ApplicationMode,
+    pub bindings: Vec<Keybinding>,
+}
+
+/// Returns the full set of keybindings, divided by mode.
+pub fn default_keybindings() -> Vec<KeybindingsGroup> {
+    vec![
+        KeybindingsGroup {
+            mode: ApplicationMode::Helping,
+            bindings: vec![
+                Keybinding {
+                    combo: "Esc, F1, ?",
+                    description: "Exit help view",
+                },
+                Keybinding {
+                    combo: "Up, Down",
+                    description: "Navigate help entries",
+                },
+                Keybinding {
+                    combo: "Pg Up, Pg Down",
+                    description: "Page through help list",
+                },
+                Keybinding {
+                    combo: "Shift+Pg Up, Shift+Pg Down",
+                    description: "Jump to start/end of help list",
+                },
+            ],
+        },
+        KeybindingsGroup {
+            mode: ApplicationMode::Normal,
+            bindings: vec![
+                Keybinding {
+                    combo: "Esc, q, Ctrl+C",
+                    description: "Quit the application",
+                },
+                Keybinding {
+                    combo: "Ctrl+F",
+                    description: "Toggle search input display",
+                },
+                Keybinding {
+                    combo: "F1, ?",
+                    description: "Toggle keybindings help",
+                },
+                Keybinding {
+                    combo: "e",
+                    description: "Enter editing mode (search)",
+                },
+                Keybinding {
+                    combo: "Up, Down",
+                    description: "Move selection in table",
+                },
+                Keybinding {
+                    combo: "Pg Up, Pg Down",
+                    description: "Scroll one page in table",
+                },
+                Keybinding {
+                    combo: "Shift+Pg Up, Shift+Pg Down",
+                    description: "Jump to start/end of table",
+                },
+                Keybinding {
+                    combo: "k",
+                    description: "Open kill-process confirmation for selected row",
+                },
+                Keybinding {
+                    combo: "Shift+Right, Shift+Left",
+                    description: "Cycle through available themes",
+                },
+            ],
+        },
+        KeybindingsGroup {
+            mode: ApplicationMode::Editing,
+            bindings: vec![
+                Keybinding {
+                    combo: "Char keys (a–z, 0–9)",
+                    description: "Insert character into search field",
+                },
+                Keybinding {
+                    combo: "Backspace",
+                    description: "Delete character from search field",
+                },
+                Keybinding {
+                    combo: "Left, Right",
+                    description: "Move cursor in search input",
+                },
+                Keybinding {
+                    combo: "Down",
+                    description: "Submit search and move selection down",
+                },
+                Keybinding {
+                    combo: "Up",
+                    description: "Submit search and move selection up",
+                },
+                Keybinding {
+                    combo: "Esc",
+                    description: "Exit search editing (hide input)",
+                },
+            ],
+        },
+        KeybindingsGroup {
+            mode: ApplicationMode::Killing,
+            bindings: vec![
+                Keybinding {
+                    combo: "Left",
+                    description: "Select 'Kill' action",
+                },
+                Keybinding {
+                    combo: "Right",
+                    description: "Select 'Cancel' action",
+                },
+                Keybinding {
+                    combo: "Enter",
+                    description: "Confirm selected kill/cancel action",
+                },
+                Keybinding {
+                    combo: "Esc",
+                    description: "Abort kill & close confirmation",
+                },
+            ],
+        },
+    ]
+}
+/// Internal helper: either a section‐header or an actual keybinding entry
+#[derive(Debug)]
+enum KeybindingRow {
+    Section(&'static str),
+    Entry {
+        combo: &'static str,
+        description: &'static str,
+    },
+}
+
+impl KeybindingRow {
+    fn cells(&self) -> [&str; 2] {
+        match self {
+            KeybindingRow::Section(title) => [*title, ""],
+            KeybindingRow::Entry { combo, description } => [*combo, *description],
+        }
+    }
+    fn is_section(&self) -> bool {
+        matches!(self, KeybindingRow::Section(_))
+    }
+}
+
 /// A component that handles the help/keybindings popup
 #[derive(Debug)]
 pub struct KeybindingsComponent {
-    /// List of keybindings (combo, description)
-    items: Vec<Keybinding>,
+    /// Flattened list of sections + entries
+    items: Vec<KeybindingRow>,
     /// Whether the popup is displayed
     pub display: bool,
     /// Table selection state
@@ -48,64 +198,30 @@ pub struct KeybindingsComponent {
 
 impl Default for KeybindingsComponent {
     fn default() -> Self {
-        let items = vec![
-            Keybinding {
-                combo: "Esc / q / Ctrl+C".into(),
-                description: "Quit the application".into(),
-            },
-            Keybinding {
-                combo: "Ctrl+F".into(),
-                description: "Toggle the search input".into(),
-            },
-            Keybinding {
-                combo: "F1 / ?".into(),
-                description: "Show or hide this help dialog".into(),
-            },
-            Keybinding {
-                combo: "j / ↓".into(),
-                description: "Move selection down".into(),
-            },
-            Keybinding {
-                combo: "k / ↑".into(),
-                description: "Move selection up".into(),
-            },
-            Keybinding {
-                combo: "PageDown".into(),
-                description: "Page down".into(),
-            },
-            Keybinding {
-                combo: "PageUp".into(),
-                description: "Page up".into(),
-            },
-            Keybinding {
-                combo: "Shift+PageDown".into(),
-                description: "Jump to last item".into(),
-            },
-            Keybinding {
-                combo: "Shift+PageUp".into(),
-                description: "Jump to first item".into(),
-            },
-            Keybinding {
-                combo: "Shift+Right / l".into(),
-                description: "Next color theme".into(),
-            },
-            Keybinding {
-                combo: "Shift+Left / h".into(),
-                description: "Previous color theme".into(),
-            },
-            Keybinding {
-                combo: "e".into(),
-                description: "Enter editing mode".into(),
-            },
-        ];
-        let col_widths = keybindings_constraint_len_calculator(&items);
+        let mut items = Vec::new();
+        for KeybindingsGroup { mode, bindings } in default_keybindings() {
+            let header = match mode {
+                ApplicationMode::Helping => "---- LOCAL ----",
+                ApplicationMode::Normal => "---- NORMAL ----",
+                ApplicationMode::Editing => "---- SEARCHING ----",
+                ApplicationMode::Killing => "---- KILLING ----",
+            };
+            items.push(KeybindingRow::Section(header));
+            for kb in bindings {
+                items.push(KeybindingRow::Entry {
+                    combo: kb.combo,
+                    description: kb.description,
+                });
+            }
+        }
+
         Self {
             items,
             display: false,
             state: TableState::default(),
             scroll: ScrollbarState::new(1),
             visible_rows: 0,
-            col_widths,
+            col_widths: (30, 70),
         }
     }
 }
@@ -203,30 +319,52 @@ impl KeybindingsComponent {
             .add_modifier(Modifier::REVERSED)
             .fg(colors.selected_cell_style_fg);
 
-        let combo_style = Style::new()
-            .fg(colors.selected_row_style_fg)
-            .bg(colors.buffer_bg);
-        let desc_style = Style::new().fg(colors.row_fg).bg(colors.buffer_bg);
+        let width = self.col_widths.0 as usize;
+        let text = "Key:";
+        let pad = width.saturating_sub(text.len());
+        let left_pad = pad / 2;
+        let right_pad = pad - left_pad;
+        let centered_header = format!("{}{}{}", " ".repeat(left_pad), text, " ".repeat(right_pad),);
 
-        let rows = self.items.iter().map(|kb| {
-            let cells = kb.ref_array().into_iter().enumerate().map(|(i, c)| {
-                let cell = Cell::from(c);
-                if i == 0 {
-                    cell.style(combo_style)
-                } else {
-                    cell.style(desc_style)
-                }
-            });
+        let header = Row::new([centered_header, "Description:".to_string()].map(Cell::from))
+            .height(crate::ITEM_HEIGHT);
+
+        let rows = self.items.iter().enumerate().map(|(i, row)| {
+            let [left, right] = row.cells();
+
+            let style = if row.is_section() {
+                Style::default()
+                    .add_modifier(Modifier::BOLD)
+                    .fg(colors.selected_row_style_fg)
+            } else if Some(i) == self.state.selected() {
+                Style::default()
+                    .add_modifier(Modifier::REVERSED)
+                    .fg(colors.selected_row_style_fg)
+            } else {
+                Style::default().fg(colors.row_fg)
+            };
+            let width = self.col_widths.0 as usize;
+            let text = left;
+            let pad = width.saturating_sub(text.len());
+            let left_pad = pad / 2;
+            let right_pad = pad - left_pad;
+            let centered = format!("{}{}{}", " ".repeat(left_pad), text, " ".repeat(right_pad),);
+
+            let cells = vec![
+                Cell::from(centered).style(style),
+                Cell::from(right).style(style),
+            ];
             Row::new(cells).height(crate::ITEM_HEIGHT)
         });
 
         let table = Table::new(
             rows,
             [
-                Constraint::Length(self.col_widths.0 + 1),
+                Constraint::Min(self.col_widths.0 + 1),
                 Constraint::Min(self.col_widths.1),
             ],
         )
+        .header(header)
         .row_highlight_style(selected_row_style)
         .cell_highlight_style(selected_cell_style)
         .bg(colors.buffer_bg)
@@ -235,9 +373,9 @@ impl KeybindingsComponent {
             Block::bordered()
                 .border_type(BorderType::Plain)
                 .border_style(Style::new().fg(colors.footer_border_color))
-                .title("Keybindings"),
+                .title(" Keybindings "),
         );
-        let area = popup_area(area, 4, 5);
+        let area = popup_area(area, 7, 5);
 
         frame.render_widget(Clear, area);
         frame.render_stateful_widget(table, area, &mut self.state);
