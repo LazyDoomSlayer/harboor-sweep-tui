@@ -33,7 +33,7 @@ impl Default for ProcessTableComponent {
             scroll: ScrollbarState::new(1),
             visible_rows: 0,
             // Default width hints: Port, PID, Name, Path, Listener
-            column_widths: (5, 5, 30, 55, 5),
+            column_widths: (5, 5, 25, 50, 10),
         }
     }
 }
