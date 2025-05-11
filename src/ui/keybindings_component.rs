@@ -1,6 +1,6 @@
 use crate::ApplicationMode;
 use crate::ui::theme::TableColors;
-use crate::util::{keybindings_constraint_len_calculator, popup_area};
+use crate::util::{center_str, keybindings_constraint_len_calculator, popup_area};
 use ratatui::layout::Alignment;
 use ratatui::widgets::Paragraph;
 use ratatui::{
@@ -319,39 +319,31 @@ impl KeybindingsComponent {
             .add_modifier(Modifier::REVERSED)
             .fg(colors.selected_cell_style_fg);
 
-        let width = self.col_widths.0 as usize;
-        let text = "Key:";
-        let pad = width.saturating_sub(text.len());
-        let left_pad = pad / 2;
-        let right_pad = pad - left_pad;
-        let centered_header = format!("{}{}{}", " ".repeat(left_pad), text, " ".repeat(right_pad),);
-
-        let header = Row::new([centered_header, "Description:".to_string()].map(Cell::from))
-            .height(crate::ITEM_HEIGHT);
+        let header = Row::new(
+            [
+                center_str("Key:", self.col_widths.0),
+                "Description:".to_string(),
+            ]
+            .map(Cell::from),
+        )
+        .height(crate::ITEM_HEIGHT);
 
         let rows = self.items.iter().enumerate().map(|(i, row)| {
             let [left, right] = row.cells();
 
-            let style = if row.is_section() {
-                Style::default()
+            let is_selected = Some(i) == self.state.selected();
+            let style = match (row.is_section(), is_selected) {
+                (true, _) => Style::default()
                     .add_modifier(Modifier::BOLD)
-                    .fg(colors.selected_row_style_fg)
-            } else if Some(i) == self.state.selected() {
-                Style::default()
+                    .fg(colors.selected_row_style_fg),
+                (false, true) => Style::default()
                     .add_modifier(Modifier::REVERSED)
-                    .fg(colors.selected_row_style_fg)
-            } else {
-                Style::default().fg(colors.row_fg)
+                    .fg(colors.selected_row_style_fg),
+                (false, false) => Style::default().fg(colors.row_fg),
             };
-            let width = self.col_widths.0 as usize;
-            let text = left;
-            let pad = width.saturating_sub(text.len());
-            let left_pad = pad / 2;
-            let right_pad = pad - left_pad;
-            let centered = format!("{}{}{}", " ".repeat(left_pad), text, " ".repeat(right_pad),);
 
             let cells = vec![
-                Cell::from(centered).style(style),
+                Cell::from(center_str(left, self.col_widths.0)).style(style),
                 Cell::from(right).style(style),
             ];
             Row::new(cells).height(crate::ITEM_HEIGHT)
