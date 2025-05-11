@@ -3,11 +3,13 @@ mod ui;
 mod util;
 
 use crate::model::{PortInfo, os};
-use crate::ui::keybindings_component::KeybindingsComponent;
-use crate::ui::kill_process_component::{KillAction, KillComponent};
-use crate::ui::process_search_component::ProcessSearchComponent;
-use crate::ui::process_table_component::ProcessTableComponent;
-use crate::ui::theme::Theme;
+use crate::ui::{
+    keybindings_component::KeybindingsComponent,
+    kill_process_component::{KillAction, KillComponent},
+    process_search_component::ProcessSearchComponent,
+    process_table_component::ProcessTableComponent,
+    theme::Theme,
+};
 
 use crate::util::popup_area;
 
@@ -93,7 +95,7 @@ fn run_background_thread(tx: mpsc::Sender<MultithreadingEvent>) {
         let event = MultithreadingEvent::ProccesesUpdate(Vec::new());
         tx.send(event).unwrap();
 
-        thread::sleep(time::Duration::from_millis(5_000));
+        thread::sleep(time::Duration::from_millis(2_000));
     }
 }
 
@@ -338,7 +340,11 @@ impl App {
                 match self.kill_process.action {
                     KillAction::Kill => {
                         if let Some(item) = self.kill_process.item.take() {
-                            os::kill_process(item.pid);
+                            let killing_response = os::kill_process(item.pid);
+                            if killing_response.success {
+                                self.processes.retain(|p| p.pid != item.pid);
+                                self.update_filtered_processes();
+                            }
                         }
                     }
                     KillAction::Cancel => {
