@@ -1,8 +1,9 @@
+mod explorer;
 mod model;
 mod ui;
 mod util;
 
-use crate::model::{PortInfo, os};
+use crate::model::{os, PortInfo};
 use crate::ui::{
     keybindings_component::KeybindingsComponent,
     kill_process_component::{KillAction, KillComponent},
@@ -15,15 +16,16 @@ use crate::util::popup_area;
 
 use color_eyre::Result;
 use ratatui::{
-    DefaultTerminal, Frame,
-    crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
-    layout::{Constraint, Direction, Flex, Layout, Margin, Rect},
+    crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers}, layout::{Constraint, Direction, Flex, Layout, Margin, Rect},
     prelude::Style,
-    style::{Stylize, palette::tailwind},
+    style::{palette::tailwind, Stylize},
     text::{Line, Span},
     widgets::{Block, BorderType, Clear, Paragraph, Scrollbar, ScrollbarOrientation, Wrap},
+    DefaultTerminal,
+    Frame,
 };
 
+use crate::explorer::{export_snapshot, ExportFormat};
 use std::{sync::mpsc, thread, time};
 
 const ITEM_HEIGHT: u16 = 1;
@@ -245,6 +247,10 @@ impl App {
             // Toggle UI elements
             (KeyModifiers::CONTROL, KeyCode::Char('f' | 'F')) => {
                 self.toggle_processes_search_display()
+            }
+            (KeyModifiers::CONTROL, KeyCode::Char('x' | 'X')) => {
+                export_snapshot(&self.table.items, ExportFormat::Json, None)
+                    .expect("TODO: panic message");
             }
             (KeyModifiers::NONE, KeyCode::F(1)) | (_, KeyCode::Char('?')) => {
                 self.toggle_keybindings_display();
