@@ -249,8 +249,10 @@ impl App {
                 self.toggle_processes_search_display()
             }
             (KeyModifiers::CONTROL, KeyCode::Char('x' | 'X')) => {
-                export_snapshot(&self.table.items, ExportFormat::Json, None)
-                    .expect("TODO: panic message");
+                let entries = self.table.items.clone();
+                thread::spawn(move || {
+                    let _ = export_snapshot(&entries, ExportFormat::Json, None);
+                });
             }
             (KeyModifiers::NONE, KeyCode::F(1)) | (_, KeyCode::Char('?')) => {
                 self.toggle_keybindings_display();
