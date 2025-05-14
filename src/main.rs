@@ -1,3 +1,4 @@
+mod event_tracker;
 mod explorer;
 mod model;
 mod ui;
