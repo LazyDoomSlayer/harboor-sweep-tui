@@ -4,7 +4,7 @@ mod model;
 mod ui;
 mod util;
 
-use crate::model::{os, PortInfo};
+use crate::model::{PortInfo, os};
 use crate::ui::{
     keybindings_component::KeybindingsComponent,
     kill_process_component::{KillAction, KillComponent},
@@ -17,16 +17,16 @@ use crate::util::popup_area;
 
 use color_eyre::Result;
 use ratatui::{
-    crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers}, layout::{Constraint, Direction, Flex, Layout, Margin, Rect},
+    DefaultTerminal, Frame,
+    crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
+    layout::{Constraint, Direction, Flex, Layout, Margin, Rect},
     prelude::Style,
-    style::{palette::tailwind, Stylize},
+    style::{Stylize, palette::tailwind},
     text::{Line, Span},
     widgets::{Block, BorderType, Clear, Paragraph, Scrollbar, ScrollbarOrientation, Wrap},
-    DefaultTerminal,
-    Frame,
 };
 
-use crate::explorer::{export_snapshot, ExportFormat};
+use crate::explorer::{ExportFormat, export_snapshot};
 use std::{sync::mpsc, thread, time};
 
 const ITEM_HEIGHT: u16 = 1;
@@ -255,6 +255,16 @@ impl App {
                     let _ = export_snapshot(&entries, ExportFormat::Json, None);
                 });
             }
+            // (KeyModifiers::CONTROL, KeyCode::Char('x' | 'X')) => {
+            //     let entries = self.table.items.clone();
+            //     let metadata = crate::explorer::ExportMetadata {
+            //         started_at: self.start_time,
+            //         exported_at: chrono::Local::now(),
+            //     };
+            //     thread::spawn(move || {
+            //         let _ = ExportFormat::Json.export_snapshot_with_metadata(&entries, None, Some(metadata));
+            //     });
+            // }
             (KeyModifiers::NONE, KeyCode::F(1)) | (_, KeyCode::Char('?')) => {
                 self.toggle_keybindings_display();
             }

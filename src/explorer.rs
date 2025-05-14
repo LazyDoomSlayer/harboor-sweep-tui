@@ -8,7 +8,7 @@ use crate::model::PortInfo;
 /// Supported export formats
 #[derive(Debug, Clone, Copy)]
 pub enum ExportFormat {
-    Csv,
+    Csv, 
     Json,
     Yaml,
 }
