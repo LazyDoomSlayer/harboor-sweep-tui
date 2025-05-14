@@ -11,6 +11,7 @@ use crate::model::PortInfo;
 pub struct PortChange {
     pub added: Vec<PortInfo>,
     pub removed: Vec<PortInfo>,
+    pub all_initial: Vec<PortInfo>,
     pub started_at: DateTime<Local>,
     pub exported_at: Option<DateTime<Local>>,
 }
@@ -20,6 +21,7 @@ impl PortChange {
         Self {
             added: vec![],
             removed: vec![],
+            all_initial: vec![],
             started_at: Local::now(),
             exported_at: None,
         }
@@ -40,6 +42,10 @@ impl PortChange {
             .filter(|(port, _)| !new_map.contains_key(port))
             .map(|(_, p)| (*p).clone())
             .collect();
+
+        if previous.is_empty() && !current.is_empty() && self.all_initial.is_empty() {
+            self.all_initial = current.to_vec();
+        }
     }
 
     pub fn export_to_file(
@@ -56,12 +62,15 @@ impl PortChange {
             self.exported_at.unwrap().format("%Y-%m-%d %H:%M:%S")
         );
 
-        let combined: Vec<PortInfo> = self
-            .added
-            .iter()
-            .cloned()
-            .chain(self.removed.iter().cloned())
-            .collect();
+        let combined: Vec<PortInfo> = if !self.all_initial.is_empty() {
+            self.all_initial.clone()
+        } else {
+            self.added
+                .iter()
+                .cloned()
+                .chain(self.removed.iter().cloned())
+                .collect()
+        };
 
         let ts = self
             .exported_at
