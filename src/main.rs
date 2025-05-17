@@ -27,6 +27,7 @@ use ratatui::{
 };
 
 use crate::explorer::{ExportFormat, export_snapshot};
+use crate::ui::process_table_component::{SortBy, SortDirection};
 use std::{sync::mpsc, thread, time};
 
 const ITEM_HEIGHT: u16 = 1;
@@ -293,6 +294,15 @@ impl App {
                     // otherwise use a reference
                     self.kill_process.item = Option::from(self.processes_filtered[idx].clone());
                 }
+            }
+            // Change sorting in table
+            (KeyModifiers::NONE, KeyCode::Char('1')) => self.table.set_or_toggle_sort(SortBy::Port),
+            (KeyModifiers::NONE, KeyCode::Char('2')) => self.table.set_or_toggle_sort(SortBy::PID),
+            (KeyModifiers::NONE, KeyCode::Char('3')) => {
+                self.table.set_or_toggle_sort(SortBy::ProcessName)
+            }
+            (KeyModifiers::NONE, KeyCode::Char('4')) => {
+                self.table.set_or_toggle_sort(SortBy::ProcessPath)
             }
             // Change theme
             (KeyModifiers::SHIFT, KeyCode::Right) => self.theme.cycle_next(),
