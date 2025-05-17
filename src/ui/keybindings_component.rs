@@ -92,6 +92,22 @@ pub fn default_keybindings() -> Vec<KeybindingsGroup> {
                     description: "Scroll one page in table",
                 },
                 Keybinding {
+                    combo: "1",
+                    description: "Sort by Port, press again to toggle direction",
+                },
+                Keybinding {
+                    combo: "2",
+                    description: "Sort by PID, press again to toggle direction",
+                },
+                Keybinding {
+                    combo: "3",
+                    description: "Sort by Process Name, press again to toggle direction",
+                },
+                Keybinding {
+                    combo: "4",
+                    description: "Sort by Process Path, press again to toggle direction",
+                },
+                Keybinding {
                     combo: "Shift+Pg Up, Shift+Pg Down",
                     description: "Jump to start/end of table",
                 },
