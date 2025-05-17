@@ -1,4 +1,4 @@
-# harboor-sweep-tui
+# Harbor Sweep TUI
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
@@ -9,40 +9,63 @@ Cross-platform TUI (terminal user interface) tool to identify and manage active 
 ## Features
 
 * **Real-time Port Monitoring**: Automatically refreshes the list of open ports and their associated processes.
-* **Search & Filter**: Instant search across PID, port number, and process name.
+* **Search & Filter**: Instantly filter by PID, port number, or process name using the built-in search bar.
+* **Sortable Columns**: Press number keys (`1`–`4`) to sort by Port, PID, Name, or Path, and toggle sort direction with
+  a keypress.
 * **Interactive TUI**: Keyboard-driven interface with Vim-style navigation.
 * **Kill Processes**: Safely terminate processes holding unwanted ports.
 * **Color Themes**: Switch between multiple Tailwind-inspired palettes.
 * **Help Popup**: On-demand keybindings reference.
 
-Once started:
+## 🔧 Once Started
 
-* **Navigation**
+### 🧭 **Navigation**
 
-    * `j` / Down Arrow: Move selection down
-    * `k` / Up Arrow: Move selection up
-    * `PageUp` / `PageDown`: Scroll by page
-    * `Shift+PageUp` / `Shift+PageDown`: Jump to first/last row
-* **Search**
+* `j` / `Down Arrow`: Move selection down
+* `k` / `Up Arrow`: Move selection up
+* `PageUp` / `PageDown`: Scroll one page
+* `Shift+PageUp` / `Shift+PageDown`: Jump to first or last row
 
-    * `Ctrl+F`: Toggle search bar
-    * Type to filter by PID, port, or process name
-    * `Esc`: Exit search
-* **Kill Process**
+### 🔍 **Search**
 
-    * `k` on selected row: Open kill confirmation
-    * `←`/`→`: Choose between “Kill” or “Cancel”
-    * `Enter`: Confirm
-* **Help**
+* `Ctrl+F`: Toggle search bar
+* `e`: Enter editing mode (focus search field)
+* Type: Filter by PID, port, or process name
+* `Backspace`: Delete from search
+* `Left` / `Right`: Move cursor in input
+* `Enter` / `Up` / `Down`: Submit search + move selection
+* `Esc`: Exit search editing
 
-    * `F1` or `?`: Toggle help popup
-* **Themes**
+### 🧨 **Kill Process**
 
-    * `Shift+Right` / `l`: Next color theme
-    * `Shift+Left`  / `h`: Previous color theme
-* **Exit**
+* `k`: Open kill-process confirmation for selected row
+* `←` / `→`: Select “Kill” or “Cancel”
+* `Enter`: Confirm kill or cancel
+* `Esc`: Cancel/abort
 
-    * `q`, `Esc`, or `Ctrl+C`
+### 🧰 **Sorting**
+
+* `1`: Sort by Port (press again to toggle ▲/▼)
+* `2`: Sort by PID (press again to toggle ▲/▼)
+* `3`: Sort by Process Name (press again to toggle ▲/▼)
+* `4`: Sort by Process Path (press again to toggle ▲/▼)
+
+### 🎨 **Themes**
+
+* `Shift+Right` / `l`: Cycle to next color theme
+* `Shift+Left` / `h`: Cycle to previous color theme
+
+### ❓ **Help**
+
+* `F1` or `?`: Toggle keybindings popup
+* `Up` / `Down`: Navigate help
+* `PageUp` / `PageDown`: Page through help
+* `Shift+PageUp` / `Shift+PageDown`: Jump to top/bottom of help
+* `Esc`, `F1`, `?`: Exit help view
+
+### 🚪 **Exit**
+
+* `q`, `Esc`, or `Ctrl+C`: Quit the application
 
 ## Configuration
 
