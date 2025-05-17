@@ -1,8 +1,6 @@
 use crate::ApplicationMode;
 use crate::ui::theme::TableColors;
-use crate::util::{center_str, keybindings_constraint_len_calculator, popup_area};
-use ratatui::layout::Alignment;
-use ratatui::widgets::Paragraph;
+use crate::util::{center_str, popup_area};
 use ratatui::{
     Frame,
     layout::{Constraint, Margin, Rect},
