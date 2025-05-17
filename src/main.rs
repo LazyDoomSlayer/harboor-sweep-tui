@@ -27,7 +27,7 @@ use ratatui::{
 };
 
 use crate::explorer::{ExportFormat, export_snapshot};
-use crate::ui::process_table_component::{SortBy, SortDirection};
+use crate::ui::process_table_component::SortBy;
 use std::{sync::mpsc, thread, time};
 
 const ITEM_HEIGHT: u16 = 1;
