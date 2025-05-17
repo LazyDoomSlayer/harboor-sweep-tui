@@ -9,8 +9,23 @@ use ratatui::{
     widgets::{Cell, Row, Scrollbar, ScrollbarState, Table, TableState},
 };
 
-/// A component that handles rendering a scrollable table of PortInfo
+#[derive(Debug, Copy, PartialEq, Default, Clone)]
+pub enum SortBy {
+    #[default]
+    Port,
+    PID,
+    ProcessName,
+    ProcessPath,
+}
 
+#[derive(Debug, Copy, PartialEq, Default, Clone)]
+pub enum SortDirection {
+    #[default]
+    Ascending,
+    Descending,
+}
+
+/// A component that handles rendering a scrollable table of PortInfo
 #[derive(Debug)]
 pub struct ProcessTableComponent {
     /// Filtered processes to display
@@ -23,6 +38,10 @@ pub struct ProcessTableComponent {
     pub visible_rows: usize,
     /// Pre-computed column width constraints
     pub column_widths: (u16, u16, u16, u16, u16),
+    /// Sorting state by column
+    pub sort_by: SortBy,
+    /// Sorting direction
+    pub sort_direction: SortDirection,
 }
 
 impl Default for ProcessTableComponent {
@@ -32,8 +51,9 @@ impl Default for ProcessTableComponent {
             state: TableState::default(),
             scroll: ScrollbarState::new(1),
             visible_rows: 0,
-            // Default width hints: Port, PID, Name, Path, Listener
-            column_widths: (5, 5, 25, 50, 10),
+            column_widths: (6, 6, 23, 50, 10), // Port, PID, ProcessName, ProcessPath, Listener
+            sort_by: SortBy::Port,
+            sort_direction: SortDirection::Ascending,
         }
     }
 }
@@ -42,8 +62,71 @@ impl ProcessTableComponent {
     /// Replace current items and update scrollbar length
     pub fn set_items(&mut self, items: Vec<PortInfo>) {
         self.items = items;
+        self.sort_items();
         let content_len = self.items.len() * crate::ITEM_HEIGHT as usize;
         self.scroll = self.scroll.content_length(content_len);
+    }
+    /// Sort items by current sort criteria
+    pub fn sort_items(&mut self) {
+        match (self.sort_by, self.sort_direction) {
+            (SortBy::Port, SortDirection::Ascending) => self.items.sort_by_key(|i| i.port),
+            (SortBy::Port, SortDirection::Descending) => {
+                self.items.sort_by_key(|i| std::cmp::Reverse(i.port))
+            }
+            (SortBy::PID, SortDirection::Ascending) => self.items.sort_by_key(|i| i.pid),
+            (SortBy::PID, SortDirection::Descending) => {
+                self.items.sort_by_key(|i| std::cmp::Reverse(i.pid))
+            }
+            (SortBy::ProcessName, SortDirection::Ascending) => self.items.sort_by(|a, b| {
+                a.process_name
+                    .to_lowercase()
+                    .cmp(&b.process_name.to_lowercase())
+            }),
+            (SortBy::ProcessName, SortDirection::Descending) => self.items.sort_by(|a, b| {
+                b.process_name
+                    .to_lowercase()
+                    .cmp(&a.process_name.to_lowercase())
+            }),
+            (SortBy::ProcessPath, SortDirection::Ascending) => self.items.sort_by(|a, b| {
+                a.process_path
+                    .to_lowercase()
+                    .cmp(&b.process_path.to_lowercase())
+            }),
+            (SortBy::ProcessPath, SortDirection::Descending) => self.items.sort_by(|a, b| {
+                b.process_path
+                    .to_lowercase()
+                    .cmp(&a.process_path.to_lowercase())
+            }),
+        }
+    }
+    /// Set sort column and toggle sort direction if it's already set to this column
+    pub fn set_or_toggle_sort(&mut self, by: SortBy) {
+        if self.sort_by == by {
+            self.toggle_sort_direction(None);
+        } else {
+            self.set_sort_column(by);
+        }
+    }
+
+    /// Set sort column and reset sort direction to ascending
+    pub fn set_sort_column(&mut self, by: SortBy) {
+        if self.sort_by != by {
+            self.sort_by = by;
+            self.sort_direction = SortDirection::Ascending;
+            self.sort_items();
+        }
+    }
+
+    /// Toggle or explicitly set sort direction
+    pub fn toggle_sort_direction(&mut self, direction: Option<SortDirection>) {
+        self.sort_direction = match direction {
+            Some(dir) => dir,
+            None => match self.sort_direction {
+                SortDirection::Ascending => SortDirection::Descending,
+                SortDirection::Descending => SortDirection::Ascending,
+            },
+        };
+        self.sort_items();
     }
 
     /// Move selection down by one row
@@ -113,16 +196,37 @@ impl ProcessTableComponent {
         self.scroll = self.scroll.position(new * crate::ITEM_HEIGHT as usize);
     }
 
+    /// Display direction indicator if sorting by this column
+    fn header_with_sort(&self, title: &str, column: SortBy) -> String {
+        if self.sort_by == column {
+            let arrow = match self.sort_direction {
+                SortDirection::Ascending => " ▲",
+                SortDirection::Descending => " ▼",
+            };
+
+            format!("{}{}", title, arrow)
+        } else {
+            title.to_string()
+        }
+    }
+
     /// Render the table and its scrollbar
     pub fn render(&mut self, frame: &mut Frame, area: Rect, colors: &TableColors) {
         // Compute how many rows fit
         self.visible_rows = area.height.saturating_sub(1) as usize;
 
         // Build header
-        let header =
-            Row::new(["Port", "PID", "Process Name", "Process Path", "Listener"].map(Cell::from))
-                .style(Style::default().fg(colors.header_fg).bg(colors.header_bg))
-                .height(crate::ITEM_HEIGHT);
+        let headers = [
+            self.header_with_sort("Port", SortBy::Port),
+            self.header_with_sort("PID", SortBy::PID),
+            self.header_with_sort("Process Name", SortBy::ProcessName),
+            self.header_with_sort("Process Path", SortBy::ProcessPath),
+            "Listener".to_string(), // No need to sort this one
+        ];
+
+        let header = Row::new(headers.map(Cell::from))
+            .style(Style::default().fg(colors.header_fg).bg(colors.header_bg))
+            .height(crate::ITEM_HEIGHT);
 
         // Build rows
         let rows = self.items.iter().map(|item| {
@@ -136,7 +240,7 @@ impl ProcessTableComponent {
             rows,
             [
                 Constraint::Length(self.column_widths.0),
-                Constraint::Min(self.column_widths.1),
+                Constraint::Length(self.column_widths.1),
                 Constraint::Min(self.column_widths.2),
                 Constraint::Min(self.column_widths.3),
                 Constraint::Min(self.column_widths.4),
