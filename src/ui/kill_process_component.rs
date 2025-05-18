@@ -153,7 +153,7 @@ impl KillComponent {
         );
 
         // 3) buttons
-        let btns = Layout::default()
+        let buttons = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Ratio(1, 3), Constraint::Ratio(1, 3)])
             .flex(Flex::Center)
@@ -164,17 +164,17 @@ impl KillComponent {
             .block(if self.action == KillAction::Kill {
                 Block::bordered().border_style(Style::new().fg(colors.selected_cell_style_fg))
             } else {
-                Block::bordered()
+                Block::bordered().border_style(Style::new().fg(colors.buffer_bg))
             });
         let cancel_btn = Paragraph::new("Cancel")
             .alignment(ratatui::layout::Alignment::Center)
             .block(if self.action == KillAction::Cancel {
                 Block::bordered().border_style(Style::new().fg(colors.selected_cell_style_fg))
             } else {
-                Block::bordered()
+                Block::bordered().border_style(Style::new().fg(colors.buffer_bg))
             });
 
-        frame.render_widget(kill_btn, btns[0]);
-        frame.render_widget(cancel_btn, btns[1]);
+        frame.render_widget(kill_btn, buttons[0]);
+        frame.render_widget(cancel_btn, buttons[1]);
     }
 }
