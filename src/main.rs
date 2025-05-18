@@ -12,7 +12,7 @@ use crate::ui::{
     process_search_component::ProcessSearchComponent,
     process_table_component::ProcessTableComponent,
     process_table_component::SortBy,
-    snapshots_component::SnapshotsComponent,
+    snapshots_component::{ExportAction, SnapshotsComponent},
     theme::Theme,
 };
 
@@ -249,12 +249,6 @@ impl App {
             (KeyModifiers::CONTROL, KeyCode::Char('f' | 'F')) => {
                 self.toggle_processes_search_display()
             }
-            (KeyModifiers::CONTROL, KeyCode::Char('x' | 'X')) => {
-                let entries = self.table.items.clone();
-                thread::spawn(move || {
-                    let _ = export_snapshot(&entries, ExportFormat::Json, None);
-                });
-            }
             // (KeyModifiers::CONTROL, KeyCode::Char('x' | 'X')) => {
             //     let entries = self.table.items.clone();
             //     let metadata = crate::explorer::ExportMetadata {
@@ -396,6 +390,32 @@ impl App {
             (KeyModifiers::NONE, KeyCode::Esc) | (KeyModifiers::NONE, KeyCode::F(2)) => {
                 self.toggle_snapshotting_display()
             }
+            (KeyModifiers::NONE, KeyCode::Left) => {
+                self.snapshots_component.action = ExportAction::Export;
+            }
+            (KeyModifiers::NONE, KeyCode::Right) => {
+                self.snapshots_component.action = ExportAction::Cancel;
+            }
+            (KeyModifiers::NONE, KeyCode::Down) => {
+                self.snapshots_component.next_format();
+            }
+            (KeyModifiers::NONE, KeyCode::Up) => {
+                self.snapshots_component.prev_format();
+            }
+            (KeyModifiers::NONE, KeyCode::Enter) => {
+                match self.kill_process.action {
+                    KillAction::Kill => {
+                        let entries = self.table.items.clone();
+                        let export_type = self.snapshots_component.selected_format.clone();
+                        thread::spawn(move || {
+                            let _ = export_snapshot(&entries, export_type, None);
+                        });
+                    }
+                    KillAction::Cancel => {}
+                }
+                self.toggle_snapshotting_display();
+            }
+
             _ => {}
         }
     }
