@@ -171,10 +171,16 @@ pub fn default_keybindings() -> Vec<KeybindingsGroup> {
         },
         KeybindingsGroup {
             mode: ApplicationMode::Snapshotting,
-            bindings: vec![Keybinding {
-                combo: "Esc, F2",
-                description: "Exit snapshotting view",
-            }],
+            bindings: vec![
+                Keybinding {
+                    combo: "Esc, F2",
+                    description: "Exit snapshotting view",
+                },
+                Keybinding {
+                    combo: "Up, Down",
+                    description: "Navigate export type entries",
+                },
+            ],
         },
     ]
 }
