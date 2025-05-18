@@ -1,14 +1,14 @@
-use std::fs::File;
-use std::io::{self, Write};
-use std::path::{PathBuf};
+use crate::model::PortInfo;
 use chrono::Local;
 use csv::Writer;
-use crate::model::PortInfo;
+use std::fs::File;
+use std::io::{self, Write};
+use std::path::PathBuf;
 
 /// Supported export formats
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ExportFormat {
-    Csv, 
+    Csv,
     Json,
     Yaml,
 }
@@ -23,7 +23,7 @@ pub fn export_snapshot(
     // Determine timestamped filename
     let ts = Local::now().format("%Y%m%d-%H%M%S").to_string();
     let file_name = match format {
-        ExportFormat::Csv  => format!("ports-{}.csv", ts),
+        ExportFormat::Csv => format!("ports-{}.csv", ts),
         ExportFormat::Json => format!("ports-{}.json", ts),
         ExportFormat::Yaml => format!("ports-{}.yaml", ts),
     };
@@ -72,8 +72,8 @@ fn write_json(file: &mut impl Write, entries: &[PortInfo]) -> io::Result<()> {
 }
 
 fn write_yaml(file: &mut impl Write, entries: &[PortInfo]) -> io::Result<()> {
-    let yaml = serde_yaml::to_string(entries)
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    let yaml =
+        serde_yaml::to_string(entries).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
     file.write_all(yaml.as_bytes())?;
     Ok(())
 }
