@@ -4,30 +4,25 @@ mod model;
 mod ui;
 mod util;
 
+use crate::explorer::{ExportFormat, export_snapshot};
 use crate::model::{PortInfo, os};
 use crate::ui::{
     keybindings_component::KeybindingsComponent,
     kill_process_component::{KillAction, KillComponent},
     process_search_component::ProcessSearchComponent,
     process_table_component::ProcessTableComponent,
+    process_table_component::SortBy,
+    snapshots_component::SnapshotsComponent,
     theme::Theme,
 };
-
-use crate::util::popup_area;
 
 use color_eyre::Result;
 use ratatui::{
     DefaultTerminal, Frame,
     crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
-    layout::{Constraint, Direction, Flex, Layout, Margin, Rect},
-    prelude::Style,
-    style::{Stylize, palette::tailwind},
-    text::{Line, Span},
-    widgets::{Block, BorderType, Clear, Paragraph, Scrollbar, ScrollbarOrientation, Wrap},
+    layout::{Constraint, Layout},
 };
 
-use crate::explorer::{ExportFormat, export_snapshot};
-use crate::ui::process_table_component::SortBy;
 use std::{sync::mpsc, thread, time};
 
 const ITEM_HEIGHT: u16 = 1;
@@ -66,6 +61,7 @@ pub struct App {
     pub keybindings: KeybindingsComponent,
     pub theme: Theme,
     pub kill_process: KillComponent,
+    pub snapshots_component: SnapshotsComponent,
 
     // processes
     processes: Vec<PortInfo>,
@@ -128,6 +124,7 @@ impl App {
             keybindings: KeybindingsComponent::default(),
             theme: Theme::default(),
             kill_process: KillComponent::default(),
+            snapshots_component: SnapshotsComponent::default(),
 
             // Processes
             processes: Vec::new(),
@@ -157,6 +154,7 @@ impl App {
             terminal.draw(|frame| self.render(frame))?;
         }
     }
+    /// Render the application's UI.
     fn render(&mut self, frame: &mut Frame) {
         let area = frame.area();
 
@@ -164,7 +162,6 @@ impl App {
             let [table_area] = Layout::vertical([Constraint::Min(1)]).areas(area);
             self.table.visible_rows = table_area.height as usize - 1;
             self.table.render(frame, table_area, &self.theme.table);
-            self.render_scrollbar(frame, table_area);
         } else {
             let [input_area, table_area] =
                 Layout::vertical([Constraint::Length(3), Constraint::Min(1)]).areas(area);
@@ -174,32 +171,18 @@ impl App {
             self.search
                 .render(frame, input_area, &self.theme.table, &self.application_mode);
             self.table.render(frame, table_area, &self.theme.table);
-            self.render_scrollbar(frame, table_area);
         }
 
         if self.keybindings.display {
             self.keybindings.render(frame, area, &self.theme.table);
         }
-        self.render_kill_popup(frame, area);
+        // Render Popups
+        self.kill_process.render(frame, area, &self.theme.table);
+        self.snapshots_component
+            .render(frame, area, &self.theme.table);
     }
 
-    fn update_filtered_processes(&mut self) {
-        let q = self.search.value.to_lowercase();
-        self.processes_filtered = self
-            .processes
-            .iter()
-            .filter(|p| {
-                // match pid
-                p.pid.to_string().contains(&q)
-                    || p.port.to_string().contains(&q)
-                    || p.process_name.to_lowercase().contains(&q)
-            })
-            .cloned()
-            .collect();
-
-        self.table.set_items(self.processes_filtered.clone());
-    }
-
+    /// Toggles the processes search display.
     fn toggle_processes_search_display(&mut self) {
         self.search.toggle();
         self.update_filtered_processes();
@@ -210,6 +193,7 @@ impl App {
             self.application_mode = ApplicationMode::Normal;
         }
     }
+    /// Toggles the keybindings display.
     fn toggle_keybindings_display(&mut self) {
         self.keybindings.display = !self.keybindings.display;
 
@@ -220,6 +204,7 @@ impl App {
         }
     }
 
+    /// User input controller handling different modes.
     fn handle_key_event(&mut self, key: KeyEvent) -> Result<AppControlFlow> {
         match self.application_mode {
             ApplicationMode::Normal => self.handle_normal_mode_key(key),
@@ -237,7 +222,6 @@ impl App {
             }
         }
     }
-
     fn handle_normal_mode_key(&mut self, key: KeyEvent) -> Result<AppControlFlow> {
         match (key.modifiers, key.code) {
             // Quit from application
@@ -268,6 +252,9 @@ impl App {
             // }
             (KeyModifiers::NONE, KeyCode::F(1)) | (_, KeyCode::Char('?')) => {
                 self.toggle_keybindings_display();
+            }
+            (KeyModifiers::NONE, KeyCode::F(2)) => {
+                self.snapshots_component.toggle();
             }
             // Modify Search input mode
             (KeyModifiers::NONE, KeyCode::Char('e')) => {
@@ -313,7 +300,6 @@ impl App {
         }
         Ok(AppControlFlow::Continue)
     }
-
     fn handle_helping_mode_key(&mut self, key: KeyEvent) {
         match (key.modifiers, key.code) {
             (KeyModifiers::NONE, KeyCode::Esc)
@@ -392,127 +378,7 @@ impl App {
         }
     }
 
-    fn kill_prompt_line(&self) -> Line {
-        if let Some(item) = &self.kill_process.item {
-            let title = format!(
-                "Kill {} {:?} port {} ?",
-                item.process_name, item.port_state, item.port,
-            );
-            Line::from(Span::raw(title))
-        } else {
-            Line::from(Span::raw("Kill ?"))
-        }
-    }
-    fn kill_prompt_description(&self) -> Line {
-        if let Some(item) = &self.kill_process.item {
-            let s = format!(
-                "Ending this process may disrupt services using port {}. Proceeding could result in data loss, network issues, or system instability.",
-                item.port,
-            );
-            Line::from(Span::raw(s))
-        } else {
-            Line::from(Span::raw("Kill ?"))
-        }
-    }
-    fn render_kill_popup(&mut self, frame: &mut Frame, area: Rect) {
-        if self.kill_process.display {
-            let block = Block::bordered()
-                .border_type(BorderType::Plain)
-                .border_style(Style::new().fg(self.theme.table.footer_border_color))
-                .bg(self.theme.table.buffer_bg)
-                .title("Kill");
-
-            let area = popup_area(area, 4, 5);
-            frame.render_widget(Clear, area);
-            frame.render_widget(block, area);
-
-            let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints(
-                    [
-                        Constraint::Length(2), // spacer
-                        Constraint::Length(3), // message
-                        Constraint::Length(3), // message
-                        Constraint::Min(1),    // spacer
-                        Constraint::Length(3), // buttons
-                        Constraint::Length(1), // spacer
-                    ]
-                    .as_ref(),
-                )
-                .split(area);
-
-            let prompt = Paragraph::new(self.kill_prompt_line())
-                .style(
-                    Style::default()
-                        .fg(self.theme.table.row_fg)
-                        .bg(self.theme.table.buffer_bg),
-                )
-                .alignment(ratatui::layout::Alignment::Center)
-                .wrap(Wrap { trim: true });
-            let prompt_area = chunks[1].inner(Margin {
-                vertical: 0,
-                horizontal: 2,
-            });
-            frame.render_widget(prompt, prompt_area);
-            let prompt_description = Paragraph::new(self.kill_prompt_description())
-                .style(
-                    Style::default()
-                        .fg(self.theme.table.row_fg)
-                        .bg(self.theme.table.buffer_bg),
-                )
-                .alignment(ratatui::layout::Alignment::Center)
-                .wrap(Wrap { trim: true });
-            let prompt_description_area = chunks[2].inner(Margin {
-                vertical: 0,
-                horizontal: 2,
-            });
-            frame.render_widget(prompt_description, prompt_description_area);
-
-            let buttons = Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints([Constraint::Ratio(1, 3), Constraint::Ratio(1, 3)])
-                .flex(Flex::Center)
-                .split(chunks[4]);
-
-            let kill_button = Paragraph::new("Kill")
-                .alignment(ratatui::layout::Alignment::Center)
-                .block(match self.kill_process.action {
-                    KillAction::Kill => Block::bordered()
-                        .border_type(BorderType::Plain)
-                        .border_style(Style::new().fg(tailwind::RED.c400)),
-                    KillAction::Cancel => Block::bordered()
-                        .border_type(BorderType::Plain)
-                        .border_style(Style::new().fg(tailwind::GRAY.c400)),
-                });
-            let cancel_button = Paragraph::new("Cancel")
-                .alignment(ratatui::layout::Alignment::Center)
-                .block(match self.kill_process.action {
-                    KillAction::Cancel => Block::bordered()
-                        .border_type(BorderType::Plain)
-                        .border_style(Style::new().fg(tailwind::RED.c400)),
-                    KillAction::Kill => Block::bordered()
-                        .border_type(BorderType::Plain)
-                        .border_style(Style::new().fg(tailwind::GRAY.c400)),
-                });
-            frame.render_widget(kill_button, buttons[0]);
-            frame.render_widget(cancel_button, buttons[1]);
-        }
-    }
-
-    fn render_scrollbar(&mut self, frame: &mut Frame, area: Rect) {
-        frame.render_stateful_widget(
-            Scrollbar::default()
-                .orientation(ScrollbarOrientation::VerticalRight)
-                .begin_symbol(None)
-                .end_symbol(None),
-            area.inner(Margin {
-                vertical: 1,
-                horizontal: 1,
-            }),
-            &mut self.table.scroll,
-        );
-    }
-
+    /// Monitors the ports and updates the processes list.
     fn monitor_ports_loop(&mut self) {
         match os::fetch_ports() {
             Ok(ports) => {
@@ -525,5 +391,23 @@ impl App {
                 eprintln!("Error fetching ports: {}", e);
             }
         }
+    }
+
+    /// Filters ports and updates filtered list.
+    fn update_filtered_processes(&mut self) {
+        let q = self.search.value.to_lowercase();
+        self.processes_filtered = self
+            .processes
+            .iter()
+            .filter(|p| {
+                // match pid
+                p.pid.to_string().contains(&q)
+                    || p.port.to_string().contains(&q)
+                    || p.process_name.to_lowercase().contains(&q)
+            })
+            .cloned()
+            .collect();
+
+        self.table.set_items(self.processes_filtered.clone());
     }
 }

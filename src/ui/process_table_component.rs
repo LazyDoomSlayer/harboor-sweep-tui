@@ -1,6 +1,7 @@
 use crate::model::PortInfo;
 use crate::ui::theme::TableColors;
 
+use ratatui::widgets::ScrollbarOrientation;
 use ratatui::{
     Frame,
     layout::{Constraint, Margin, Rect},
@@ -264,9 +265,13 @@ impl ProcessTableComponent {
         frame.render_stateful_widget(table, area, &mut self.state);
 
         // Render scrollbar
+        self.render_scrollbar(frame, area);
+    }
+    /// Renders scrollbar for table list
+    fn render_scrollbar(&mut self, frame: &mut Frame, area: Rect) {
         frame.render_stateful_widget(
             Scrollbar::default()
-                .orientation(ratatui::widgets::ScrollbarOrientation::VerticalRight)
+                .orientation(ScrollbarOrientation::VerticalRight)
                 .begin_symbol(None)
                 .end_symbol(None),
             area.inner(Margin {
