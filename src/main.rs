@@ -106,6 +106,7 @@ pub enum ApplicationMode {
     Editing,
     Helping,
     Killing,
+    Snapshotting,
 }
 
 enum AppControlFlow {
@@ -203,6 +204,16 @@ impl App {
             self.application_mode = ApplicationMode::Normal;
         }
     }
+    /// Toggles the snapshotting display.
+    fn toggle_snapshotting_display(&mut self) {
+        self.snapshots_component.toggle();
+
+        if self.snapshots_component.display {
+            self.application_mode = ApplicationMode::Snapshotting;
+        } else {
+            self.application_mode = ApplicationMode::Normal;
+        }
+    }
 
     /// User input controller handling different modes.
     fn handle_key_event(&mut self, key: KeyEvent) -> Result<AppControlFlow> {
@@ -218,6 +229,10 @@ impl App {
             }
             ApplicationMode::Helping => {
                 self.handle_helping_mode_key(key);
+                Ok(AppControlFlow::Continue)
+            }
+            ApplicationMode::Snapshotting => {
+                self.handle_snapshotting_mode_key(key);
                 Ok(AppControlFlow::Continue)
             }
         }
@@ -253,9 +268,7 @@ impl App {
             (KeyModifiers::NONE, KeyCode::F(1)) | (_, KeyCode::Char('?')) => {
                 self.toggle_keybindings_display();
             }
-            (KeyModifiers::NONE, KeyCode::F(2)) => {
-                self.snapshots_component.toggle();
-            }
+            (KeyModifiers::NONE, KeyCode::F(2)) => self.toggle_snapshotting_display(),
             // Modify Search input mode
             (KeyModifiers::NONE, KeyCode::Char('e')) => {
                 self.application_mode = ApplicationMode::Editing;
@@ -307,6 +320,7 @@ impl App {
             | (_, KeyCode::Char('?')) => {
                 self.toggle_keybindings_display();
             }
+
             // Navigate in the list
             (KeyModifiers::SHIFT, KeyCode::PageUp) => self.keybindings.first_row(),
             (KeyModifiers::SHIFT, KeyCode::PageDown) => self.keybindings.last_row(),
@@ -377,7 +391,14 @@ impl App {
             _ => {}
         }
     }
-
+    fn handle_snapshotting_mode_key(&mut self, key: KeyEvent) {
+        match (key.modifiers, key.code) {
+            (KeyModifiers::NONE, KeyCode::Esc) | (KeyModifiers::NONE, KeyCode::F(2)) => {
+                self.toggle_snapshotting_display()
+            }
+            _ => {}
+        }
+    }
     /// Monitors the ports and updates the processes list.
     fn monitor_ports_loop(&mut self) {
         match os::fetch_ports() {

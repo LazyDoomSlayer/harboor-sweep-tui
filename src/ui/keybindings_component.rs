@@ -169,6 +169,13 @@ pub fn default_keybindings() -> Vec<KeybindingsGroup> {
                 },
             ],
         },
+        KeybindingsGroup {
+            mode: ApplicationMode::Snapshotting,
+            bindings: vec![Keybinding {
+                combo: "Esc, F2",
+                description: "Exit snapshotting view",
+            }],
+        },
     ]
 }
 /// Internal helper: either a section‐header or an actual keybinding entry
@@ -219,6 +226,7 @@ impl Default for KeybindingsComponent {
                 ApplicationMode::Normal => "---- NORMAL ----",
                 ApplicationMode::Editing => "---- SEARCHING ----",
                 ApplicationMode::Killing => "---- KILLING ----",
+                ApplicationMode::Snapshotting => "---- Snapshotting ----",
             };
             items.push(KeybindingRow::Section(header));
             for kb in bindings {
