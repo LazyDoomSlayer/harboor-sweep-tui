@@ -1,10 +1,12 @@
 use chrono::{DateTime, Local};
-use std::collections::HashMap;
-use std::fs::{create_dir_all, File};
-use std::io::{self, Write};
-use std::path::PathBuf;
+use std::{
+    collections::HashMap,
+    fs::{File, create_dir_all},
+    io::{self, Write},
+    path::PathBuf,
+};
 
-use crate::explorer::{export_snapshot, ExportFormat};
+use crate::explorer::{ExportFormat, export_snapshot};
 use crate::model::PortInfo;
 
 #[derive(Debug, Clone)]
