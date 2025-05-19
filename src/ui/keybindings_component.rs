@@ -337,6 +337,10 @@ impl KeybindingsComponent {
 
     /// Render the keybindings popup
     pub fn render(&mut self, frame: &mut Frame, area: Rect, colors: &TableColors) {
+        if !self.display {
+            return;
+        }
+
         // Update visible rows
         self.visible_rows = area.height.saturating_sub(1) as usize;
 
