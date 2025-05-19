@@ -23,6 +23,7 @@ use ratatui::{
     layout::{Constraint, Layout},
 };
 
+use crate::ui::footer_component::FooterComponent;
 use std::{sync::mpsc, thread, time};
 
 const ITEM_HEIGHT: u16 = 1;
@@ -62,6 +63,7 @@ pub struct App {
     pub theme: Theme,
     pub kill_process: KillComponent,
     pub snapshots_component: SnapshotsComponent,
+    pub footer_component: FooterComponent,
 
     // processes
     processes: Vec<PortInfo>,
@@ -126,6 +128,7 @@ impl App {
             theme: Theme::default(),
             kill_process: KillComponent::default(),
             snapshots_component: SnapshotsComponent::default(),
+            footer_component: FooterComponent::default(),
 
             // Processes
             processes: Vec::new(),
@@ -160,12 +163,22 @@ impl App {
         let area = frame.area();
 
         if !self.search.display {
-            let [table_area] = Layout::vertical([Constraint::Min(1)]).areas(area);
+            let [table_area, footer_area] =
+                Layout::vertical([Constraint::Min(1), Constraint::Length(3)]).areas(area);
             self.table.visible_rows = table_area.height as usize - 1;
             self.table.render(frame, table_area, &self.theme.table);
+            self.footer_component
+                .render(frame, footer_area, &self.theme.table);
         } else {
-            let [input_area, table_area] =
-                Layout::vertical([Constraint::Length(3), Constraint::Min(1)]).areas(area);
+            let [input_area, table_area, footer_area] = Layout::vertical([
+                Constraint::Length(3),
+                Constraint::Min(1),
+                Constraint::Length(3),
+            ])
+            .areas(area);
+
+            self.footer_component
+                .render(frame, footer_area, &self.theme.table);
 
             self.table.visible_rows = table_area.height as usize - 1;
 
