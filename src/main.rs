@@ -7,6 +7,7 @@ mod util;
 use crate::explorer::{ExportFormat, export_snapshot};
 use crate::model::{PortInfo, os};
 use crate::ui::{
+    footer_component::FooterComponent,
     keybindings_component::KeybindingsComponent,
     kill_process_component::{KillAction, KillComponent},
     process_search_component::ProcessSearchComponent,
@@ -20,10 +21,9 @@ use color_eyre::Result;
 use ratatui::{
     DefaultTerminal, Frame,
     crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
-    layout::{Constraint, Layout},
+    layout::{Constraint, Direction, Layout},
 };
 
-use crate::ui::footer_component::FooterComponent;
 use std::{sync::mpsc, thread, time};
 
 const ITEM_HEIGHT: u16 = 1;
@@ -162,35 +162,45 @@ impl App {
     fn render(&mut self, frame: &mut Frame) {
         let area = frame.area();
 
-        if !self.search.display {
-            let [table_area, footer_area] =
-                Layout::vertical([Constraint::Min(1), Constraint::Length(3)]).areas(area);
-            self.table.visible_rows = table_area.height as usize - 1;
-            self.table.render(frame, table_area, &self.theme.table);
-            self.footer_component
-                .render(frame, footer_area, &self.theme.table);
-        } else {
-            let [input_area, table_area, footer_area] = Layout::vertical([
-                Constraint::Length(3),
-                Constraint::Min(1),
-                Constraint::Length(3),
-            ])
-            .areas(area);
+        let mut layout_constraints = vec![];
 
-            self.footer_component
-                .render(frame, footer_area, &self.theme.table);
+        if self.search.display {
+            layout_constraints.push(Constraint::Length(3));
+        }
 
-            self.table.visible_rows = table_area.height as usize - 1;
+        layout_constraints.push(Constraint::Min(1));
 
+        if self.footer_component.display {
+            layout_constraints.push(Constraint::Length(3));
+        }
+
+        let areas = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints(layout_constraints)
+            .split(area);
+
+        let mut index = 0;
+
+        if self.search.display {
+            let input_area = areas[index];
             self.search
                 .render(frame, input_area, &self.theme.table, &self.application_mode);
-            self.table.render(frame, table_area, &self.theme.table);
+            index += 1;
         }
 
-        if self.keybindings.display {
-            self.keybindings.render(frame, area, &self.theme.table);
+        let table_area = areas[index];
+        self.table.visible_rows = table_area.height as usize - 1;
+        self.table.render(frame, table_area, &self.theme.table);
+        index += 1;
+
+        if self.footer_component.display {
+            let footer_area = areas[index];
+            self.footer_component
+                .render(frame, footer_area, &self.theme.table);
         }
-        // Render Popups
+
+        // Popups
+        self.keybindings.render(frame, area, &self.theme.table);
         self.kill_process.render(frame, area, &self.theme.table);
         self.snapshots_component
             .render(frame, area, &self.theme.table);
