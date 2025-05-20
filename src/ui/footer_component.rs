@@ -11,14 +11,12 @@ use ratatui::widgets::{Block, BorderType, Paragraph};
 #[derive(Debug)]
 pub struct FooterComponent {
     pub display: bool,
-    pub is_logging: bool,
     pub export_format: ExportFormat,
 }
 impl Default for FooterComponent {
     fn default() -> Self {
         Self {
             display: false,
-            is_logging: false,
             export_format: ExportFormat::Json,
         }
     }
@@ -29,8 +27,8 @@ impl FooterComponent {
         self.display = !self.display;
     }
 
-    pub fn render(&self, frame: &mut Frame, area: Rect, colors: &TableColors) {
-        let footer_text = if self.is_logging {
+    pub fn render(&self, frame: &mut Frame, area: Rect, _colors: &TableColors, is_tracking: bool) {
+        let footer_text = if is_tracking {
             Line::from(vec![
                 Span::styled(
                     "🔴 Recording active",
