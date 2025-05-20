@@ -1,34 +1,16 @@
-use crate::PortInfo;
-use crate::explorer::ExportFormat;
+use crate::model::PortInfo;
 
-use chrono::{DateTime, Local, Utc};
-use serde::Serialize;
+use chrono::{DateTime, Utc};
+use csv::Writer;
+
+use crate::portwatch::ExportFormat;
+use crate::portwatch::common::PortEvent;
+use crate::portwatch::export::export_to_file;
+use std::collections::HashSet;
 use std::{
-    collections::HashSet,
-    fs::File,
-    io::{self, Write},
+    io::{Result, Write},
     path::PathBuf,
 };
-
-#[derive(Debug, Serialize, Clone)]
-#[serde(tag = "event")]
-pub enum PortEvent {
-    #[serde(rename = "initial_state")]
-    InitialState {
-        timestamp: DateTime<Utc>,
-        ports: Vec<PortInfo>,
-    },
-    #[serde(rename = "port_opened")]
-    PortOpened {
-        timestamp: DateTime<Utc>,
-        port: PortInfo,
-    },
-    #[serde(rename = "port_closed")]
-    PortClosed {
-        timestamp: DateTime<Utc>,
-        port: PortInfo,
-    },
-}
 
 #[derive(Debug, Default)]
 pub struct Tracker {
@@ -93,60 +75,18 @@ impl Tracker {
         self.baseline = current_ports;
     }
 
-    /// Exports all recorded port events to a file in the given format.
-    pub fn export(
-        &self,
-        format: ExportFormat,
-        output_dir: Option<&PathBuf>,
-    ) -> io::Result<PathBuf> {
-        let base_dir = output_dir.cloned().unwrap_or_else(|| PathBuf::from("."));
-        let snapshots_dir = base_dir.join("snapshots");
-        std::fs::create_dir_all(&snapshots_dir)?;
-
-        let ts = Local::now().format("%Y%m%d-%H%M%S").to_string();
-        let file_name = match format {
-            ExportFormat::Csv => format!("changes-{}.csv", ts),
-            ExportFormat::Json => format!("changes-{}.json", ts),
-            ExportFormat::Yaml => format!("changes-{}.yaml", ts),
-        };
-
-        let path = snapshots_dir.join(file_name);
-        let mut file = File::create(&path)?;
-
-        match format {
-            ExportFormat::Csv => self.write_csv(&mut file),
-            ExportFormat::Json => self.write_json(&mut file),
-            ExportFormat::Yaml => self.write_yaml(&mut file),
-        }?;
-
-        Ok(path)
+    pub fn export(&self, format: ExportFormat, output_dir: Option<&PathBuf>) -> Result<PathBuf> {
+        export_to_file(
+            &self.events,
+            format,
+            "changes",
+            output_dir,
+            Some(Self::write_events_csv),
+        )
     }
 
-    /// Internal helper to compute diff between two sets of ports.
-    fn diff_ports(old: &[PortInfo], new: &[PortInfo]) -> (Vec<PortInfo>, Vec<PortInfo>) {
-        let old_set: HashSet<_> = old.iter().cloned().collect();
-        let new_set: HashSet<_> = new.iter().cloned().collect();
-
-        let added = new_set.difference(&old_set).cloned().collect();
-        let removed = old_set.difference(&new_set).cloned().collect();
-
-        (added, removed)
-    }
-
-    fn write_json(&self, file: &mut impl Write) -> io::Result<()> {
-        let json = serde_json::to_string_pretty(&self.events)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-        file.write_all(json.as_bytes())
-    }
-
-    fn write_yaml(&self, file: &mut impl Write) -> io::Result<()> {
-        let yaml = serde_yaml::to_string(&self.events)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-        file.write_all(yaml.as_bytes())
-    }
-
-    fn write_csv(&self, file: &mut impl Write) -> io::Result<()> {
-        let mut wtr = csv::Writer::from_writer(file);
+    fn write_events_csv(file: &mut dyn Write, events: &[PortEvent]) -> Result<()> {
+        let mut wtr = Writer::from_writer(file);
         wtr.write_record(&[
             "timestamp",
             "event",
@@ -156,7 +96,7 @@ impl Tracker {
             "process_path",
         ])?;
 
-        for event in &self.events {
+        for event in events {
             match event {
                 PortEvent::InitialState { timestamp, ports } => {
                     for p in ports {
@@ -194,5 +134,16 @@ impl Tracker {
         }
 
         wtr.flush()
+    }
+
+    /// Internal helper to compute diff between two sets of ports.
+    fn diff_ports(old: &[PortInfo], new: &[PortInfo]) -> (Vec<PortInfo>, Vec<PortInfo>) {
+        let old_set: HashSet<_> = old.iter().cloned().collect();
+        let new_set: HashSet<_> = new.iter().cloned().collect();
+
+        let added = new_set.difference(&old_set).cloned().collect();
+        let removed = old_set.difference(&new_set).cloned().collect();
+
+        (added, removed)
     }
 }
