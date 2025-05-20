@@ -1,12 +1,15 @@
-use crate::ApplicationMode;
-use crate::explorer::ExportFormat;
+use crate::portwatch::ExportFormat;
+
 use crate::ui::theme::TableColors;
-use ratatui::Frame;
-use ratatui::layout::{Alignment, Position, Rect};
-use ratatui::prelude::Style;
-use ratatui::style::Modifier;
-use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType, Paragraph};
+
+use ratatui::{
+    Frame,
+    layout::{Alignment, Rect},
+    prelude::Style,
+    style::Modifier,
+    text::{Line, Span},
+    widgets::Paragraph,
+};
 
 #[derive(Debug)]
 pub struct FooterComponent {

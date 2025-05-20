@@ -1,6 +1,6 @@
 use crate::ui::theme::TableColors;
 
-use crate::explorer::ExportFormat;
+use crate::portwatch::ExportFormat;
 use crate::util::popup_area;
 use ratatui::text::{Span, Text};
 use ratatui::{
