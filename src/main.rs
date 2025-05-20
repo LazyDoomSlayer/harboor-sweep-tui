@@ -1,4 +1,3 @@
-mod explorer;
 mod model;
 mod portwatch;
 mod ui;
