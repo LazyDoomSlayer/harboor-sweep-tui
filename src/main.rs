@@ -1,10 +1,9 @@
 mod explorer;
 mod model;
-mod tracker;
+mod portwatch;
 mod ui;
 mod util;
 
-use crate::explorer::{ExportFormat, export_snapshot};
 use crate::model::{PortInfo, os};
 use crate::ui::{
     footer_component::FooterComponent,
@@ -23,6 +22,8 @@ use ratatui::{
     crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     layout::{Constraint, Direction, Layout},
 };
+
+use crate::portwatch::{snapshot::export_snapshot, tracker::Tracker};
 
 use std::{sync::mpsc, thread, time};
 
@@ -50,7 +51,6 @@ fn main() -> Result<()> {
     color_eyre::install()?;
     bootstrap()
 }
-use crate::tracker::Tracker;
 
 /// The main application which holds the state and logic of the application.
 #[derive(Debug, Default)]
