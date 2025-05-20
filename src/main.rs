@@ -1,6 +1,6 @@
-mod event_tracker;
 mod explorer;
 mod model;
+mod tracker;
 mod ui;
 mod util;
 
@@ -50,6 +50,7 @@ fn main() -> Result<()> {
     color_eyre::install()?;
     bootstrap()
 }
+use crate::tracker::Tracker;
 
 /// The main application which holds the state and logic of the application.
 #[derive(Debug, Default)]
@@ -64,6 +65,7 @@ pub struct App {
     pub kill_process: KillComponent,
     pub snapshots_component: SnapshotsComponent,
     pub footer_component: FooterComponent,
+    pub tracker: Tracker,
 
     // processes
     processes: Vec<PortInfo>,
@@ -129,7 +131,7 @@ impl App {
             kill_process: KillComponent::default(),
             snapshots_component: SnapshotsComponent::default(),
             footer_component: FooterComponent::default(),
-
+            tracker: Tracker::new(),
             // Processes
             processes: Vec::new(),
             processes_filtered: Vec::new(),
@@ -195,8 +197,12 @@ impl App {
 
         if self.footer_component.display {
             let footer_area = areas[index];
-            self.footer_component
-                .render(frame, footer_area, &self.theme.table);
+            self.footer_component.render(
+                frame,
+                footer_area,
+                &self.theme.table,
+                self.tracker.is_active,
+            );
         }
 
         // Popups
@@ -282,6 +288,16 @@ impl App {
             //         let _ = ExportFormat::Json.export_snapshot_with_metadata(&entries, None, Some(metadata));
             //     });
             // }
+            (KeyModifiers::NONE, KeyCode::Char('s')) => {
+                if !self.tracker.is_active {
+                    self.tracker.start(self.processes.clone());
+                } else {
+                    self.tracker.stop();
+                }
+
+                self.footer_component.toggle();
+            }
+
             (KeyModifiers::NONE, KeyCode::F(1)) | (_, KeyCode::Char('?')) => {
                 self.toggle_keybindings_display();
             }
@@ -446,10 +462,16 @@ impl App {
     fn monitor_ports_loop(&mut self) {
         match os::fetch_ports() {
             Ok(ports) => {
-                self.processes = ports;
+                // Always update the visible process list
+                self.processes = ports.clone();
                 self.update_filtered_processes();
                 let length = self.processes_filtered.len() * ITEM_HEIGHT as usize;
                 self.table.scroll = self.table.scroll.content_length(length);
+
+                // If tracking is active, update tracker
+                if self.tracker.is_active {
+                    self.tracker.track_once(ports);
+                }
             }
             Err(e) => {
                 eprintln!("Error fetching ports: {}", e);
