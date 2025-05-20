@@ -1,9 +1,10 @@
-#[derive(serde::Serialize, Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize)]
 pub enum ProcessPortState {
-    Hosting,
     Using,
+    Hosting,
 }
-#[derive(serde::Serialize, Debug, Clone)]
+
+#[derive(serde::Serialize, Debug, Clone, Eq, Hash, PartialEq)]
 pub struct PortInfo {
     pub id: String,
     pub port: u16,
