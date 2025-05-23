@@ -18,18 +18,6 @@ pub struct Keybinding {
     pub combo: &'static str,
     pub description: &'static str,
 }
-impl Keybinding {
-    pub fn ref_array(&self) -> Vec<String> {
-        vec![self.combo.to_string(), self.description.to_string()]
-    }
-
-    pub fn combo(&self) -> &str {
-        &self.combo
-    }
-    pub fn description(&self) -> &str {
-        &self.description
-    }
-}
 
 /// Groups keybindings by application mode.
 #[derive(Debug)]
@@ -112,6 +100,18 @@ pub fn default_keybindings() -> Vec<KeybindingsGroup> {
                 Keybinding {
                     combo: "k",
                     description: "Open kill-process confirmation for selected row",
+                },
+                Keybinding {
+                    combo: "Ctrl+S",
+                    description: "Start/Stop auditing of port activity (live tracking)",
+                },
+                Keybinding {
+                    combo: "f",
+                    description: "Change export format for tracked port events",
+                },
+                Keybinding {
+                    combo: "e",
+                    description: "Export current tracked port changes immediately",
                 },
                 Keybinding {
                     combo: "Shift+Right, Shift+Left",
