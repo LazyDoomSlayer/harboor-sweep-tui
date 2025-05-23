@@ -173,12 +173,24 @@ pub fn default_keybindings() -> Vec<KeybindingsGroup> {
             mode: ApplicationMode::Snapshotting,
             bindings: vec![
                 Keybinding {
-                    combo: "Esc, F2",
-                    description: "Exit snapshotting view",
-                },
-                Keybinding {
                     combo: "Up, Down",
                     description: "Navigate export type entries",
+                },
+                Keybinding {
+                    combo: "Left",
+                    description: "Select 'Export' action",
+                },
+                Keybinding {
+                    combo: "Right",
+                    description: "Select 'Cancel' action",
+                },
+                Keybinding {
+                    combo: "Enter",
+                    description: "Confirm selected export/cancel action",
+                },
+                Keybinding {
+                    combo: "Esc, F2",
+                    description: "Exit snapshotting view",
                 },
             ],
         },
@@ -228,11 +240,11 @@ impl Default for KeybindingsComponent {
         let mut items = Vec::new();
         for KeybindingsGroup { mode, bindings } in default_keybindings() {
             let header = match mode {
-                ApplicationMode::Helping => "---- LOCAL ----",
-                ApplicationMode::Normal => "---- NORMAL ----",
-                ApplicationMode::Editing => "---- SEARCHING ----",
-                ApplicationMode::Killing => "---- KILLING ----",
-                ApplicationMode::Snapshotting => "---- Snapshotting ----",
+                ApplicationMode::Helping => "---- Local ----",
+                ApplicationMode::Normal => "---- Normal ----",
+                ApplicationMode::Editing => "---- Searching ----",
+                ApplicationMode::Killing => "---- Killing ----",
+                ApplicationMode::Snapshotting => "---- Instant Snapshot ----",
             };
             items.push(KeybindingRow::Section(header));
             for kb in bindings {

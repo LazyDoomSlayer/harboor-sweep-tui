@@ -94,7 +94,7 @@ impl SnapshotsComponent {
             .border_type(BorderType::Plain)
             .border_style(Style::new().fg(colors.footer_border_color))
             .bg(colors.buffer_bg)
-            .title(" Snapshotting ");
+            .title(" Instant Snapshot ");
 
         let area = popup_area(area, 4, 5);
         frame.render_widget(Clear, area);

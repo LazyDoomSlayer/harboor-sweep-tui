@@ -2,6 +2,7 @@ use crate::portwatch::ExportFormat;
 
 use crate::ui::theme::TableColors;
 
+use ratatui::widgets::{Block, BorderType};
 use ratatui::{
     Frame,
     layout::{Alignment, Rect},
@@ -30,7 +31,7 @@ impl FooterComponent {
         self.display = !self.display;
     }
 
-    pub fn render(&self, frame: &mut Frame, area: Rect, _colors: &TableColors, is_tracking: bool) {
+    pub fn render(&self, frame: &mut Frame, area: Rect, colors: &TableColors, is_tracking: bool) {
         let footer_text = if is_tracking {
             Line::from(vec![
                 Span::styled(
@@ -60,7 +61,12 @@ impl FooterComponent {
 
         let footer = Paragraph::new(footer_text)
             .alignment(Alignment::Center)
-            .style(Style::default());
+            .style(Style::default().fg(colors.row_fg).bg(colors.buffer_bg))
+            .block(
+                Block::bordered()
+                    .border_type(BorderType::Plain)
+                    .border_style(Style::new().fg(colors.footer_border_color)),
+            );
 
         frame.render_widget(footer, area);
     }
