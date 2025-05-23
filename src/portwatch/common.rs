@@ -3,11 +3,30 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 
 /// Supported export formats
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum ExportFormat {
-    Csv,
+    #[default]
     Json,
+    Csv,
     Yaml,
+}
+
+impl ExportFormat {
+    pub fn next(self) -> Self {
+        match self {
+            ExportFormat::Json => ExportFormat::Csv,
+            ExportFormat::Csv => ExportFormat::Yaml,
+            ExportFormat::Yaml => ExportFormat::Json,
+        }
+    }
+
+    pub fn prev(self) -> Self {
+        match self {
+            ExportFormat::Json => ExportFormat::Yaml,
+            ExportFormat::Csv => ExportFormat::Json,
+            ExportFormat::Yaml => ExportFormat::Csv,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Clone)]
