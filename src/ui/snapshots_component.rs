@@ -37,24 +37,6 @@ impl Default for SnapshotsComponent {
     }
 }
 
-impl ExportFormat {
-    pub fn next(self) -> Self {
-        match self {
-            ExportFormat::Json => ExportFormat::Csv,
-            ExportFormat::Csv => ExportFormat::Yaml,
-            ExportFormat::Yaml => ExportFormat::Json,
-        }
-    }
-
-    pub fn prev(self) -> Self {
-        match self {
-            ExportFormat::Json => ExportFormat::Yaml,
-            ExportFormat::Csv => ExportFormat::Json,
-            ExportFormat::Yaml => ExportFormat::Csv,
-        }
-    }
-}
-
 impl SnapshotsComponent {
     /// Toggle display on/off, clear selection when opening
     pub fn toggle(&mut self) {
