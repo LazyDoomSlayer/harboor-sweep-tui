@@ -55,11 +55,11 @@ impl FooterComponent {
                 ),
                 Span::raw(" | "),
                 Span::styled("[F]", Style::default()),
-                Span::raw(" Format  "),
+                Span::raw(" Export Format  "),
                 Span::styled("[E]", Style::default()),
                 Span::raw(" Export  "),
-                Span::styled("[S]", Style::default()),
-                Span::raw(" Stop"),
+                Span::styled("[Ctrl+S]", Style::default()),
+                Span::raw(" Stop & Export"),
             ])
         } else {
             Line::from(vec![
