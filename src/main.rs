@@ -22,7 +22,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout},
 };
 
-use crate::portwatch::{snapshot::export_snapshot, tracker::Tracker};
+use crate::portwatch::{ExportFormat, snapshot::export_snapshot, tracker::Tracker};
 
 use std::{sync::mpsc, thread, time};
 
@@ -277,16 +277,11 @@ impl App {
             (KeyModifiers::CONTROL, KeyCode::Char('f' | 'F')) => {
                 self.toggle_processes_search_display()
             }
-            // (KeyModifiers::CONTROL, KeyCode::Char('x' | 'X')) => {
-            //     let entries = self.table.items.clone();
-            //     let metadata = crate::explorer::ExportMetadata {
-            //         started_at: self.start_time,
-            //         exported_at: chrono::Local::now(),
-            //     };
-            //     thread::spawn(move || {
-            //         let _ = ExportFormat::Json.export_snapshot_with_metadata(&entries, None, Some(metadata));
-            //     });
-            // }
+            (KeyModifiers::NONE, KeyCode::Char('e')) => {
+                match self.tracker.export(ExportFormat::Json, None) {
+                    _ => {}
+                }
+            }
             (KeyModifiers::NONE, KeyCode::Char('s')) => {
                 if !self.tracker.is_active {
                     self.tracker.start(self.processes.clone());
