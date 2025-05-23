@@ -3,11 +3,9 @@ use crate::model::PortInfo;
 use chrono::{DateTime, Utc};
 use csv::Writer;
 
-use crate::portwatch::ExportFormat;
-use crate::portwatch::common::PortEvent;
-use crate::portwatch::export::export_to_file;
-use std::collections::HashSet;
+use crate::portwatch::{ExportFormat, common::PortEvent, export::export_to_file};
 use std::{
+    collections::HashSet,
     io::{Result, Write},
     path::PathBuf,
 };
@@ -18,6 +16,7 @@ pub struct Tracker {
     pub baseline: Vec<PortInfo>,
     pub started_at: Option<DateTime<Utc>>,
     pub is_active: bool,
+    pub export_format: ExportFormat,
 }
 
 impl Tracker {
@@ -27,6 +26,7 @@ impl Tracker {
             baseline: vec![],
             started_at: None,
             is_active: false,
+            export_format: ExportFormat::Json,
         }
     }
 
@@ -45,7 +45,7 @@ impl Tracker {
     /// Stops the tracker and immediately exports all collected events as JSON.
     pub fn stop(&mut self) {
         self.is_active = false;
-        match self.export(ExportFormat::Json, None) {
+        match self.export(None) {
             _ => {}
         }
     }
@@ -75,10 +75,10 @@ impl Tracker {
         self.baseline = current_ports;
     }
 
-    pub fn export(&self, format: ExportFormat, output_dir: Option<&PathBuf>) -> Result<PathBuf> {
+    pub fn export(&self, output_dir: Option<&PathBuf>) -> Result<PathBuf> {
         export_to_file(
             &self.events,
-            format,
+            self.export_format,
             "changes",
             output_dir,
             Some(Self::write_events_csv),
