@@ -200,7 +200,10 @@ impl App {
                 frame,
                 footer_area,
                 &self.theme.table,
+                self.tracker.export_format,
                 self.tracker.is_active,
+                self.tracker.started_at,
+                self.tracker.events.len(),
             );
         }
 
@@ -277,11 +280,13 @@ impl App {
             (KeyModifiers::CONTROL, KeyCode::Char('f' | 'F')) => {
                 self.toggle_processes_search_display()
             }
-            (KeyModifiers::NONE, KeyCode::Char('e')) => {
-                match self.tracker.export(ExportFormat::Json, None) {
-                    _ => {}
-                }
+            (KeyModifiers::NONE, KeyCode::Char('e')) => match self.tracker.export(None) {
+                _ => {}
+            },
+            (KeyModifiers::NONE, KeyCode::Char('f' | 'F')) => {
+                self.tracker.export_format = self.tracker.export_format.next();
             }
+
             (KeyModifiers::NONE, KeyCode::Char('s')) => {
                 if !self.tracker.is_active {
                     self.tracker.start(self.processes.clone());
