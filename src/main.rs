@@ -22,8 +22,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout},
 };
 
-use crate::portwatch::{ExportFormat, snapshot::export_snapshot, tracker::Tracker};
-
+use crate::portwatch::{snapshot::export_snapshot, tracker::Tracker};
 use std::{sync::mpsc, thread, time};
 
 const ITEM_HEIGHT: u16 = 1;
@@ -280,14 +279,13 @@ impl App {
             (KeyModifiers::CONTROL, KeyCode::Char('f' | 'F')) => {
                 self.toggle_processes_search_display()
             }
-            (KeyModifiers::NONE, KeyCode::Char('e')) => match self.tracker.export(None) {
+            (KeyModifiers::CONTROL, KeyCode::Char('e')) => match self.tracker.export(None) {
                 _ => {}
             },
             (KeyModifiers::NONE, KeyCode::Char('f' | 'F')) => {
                 self.tracker.export_format = self.tracker.export_format.next();
             }
-
-            (KeyModifiers::NONE, KeyCode::Char('s')) => {
+            (KeyModifiers::CONTROL, KeyCode::Char('s')) => {
                 if !self.tracker.is_active {
                     self.tracker.start(self.processes.clone());
                 } else {

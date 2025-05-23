@@ -106,12 +106,12 @@ pub fn default_keybindings() -> Vec<KeybindingsGroup> {
                     description: "Start/Stop auditing of port activity (live tracking)",
                 },
                 Keybinding {
-                    combo: "f",
-                    description: "Change export format for tracked port events",
+                    combo: "Ctrl+e",
+                    description: "Export current tracked port changes immediately",
                 },
                 Keybinding {
-                    combo: "e",
-                    description: "Export current tracked port changes immediately",
+                    combo: "f",
+                    description: "Change export format for tracked port events",
                 },
                 Keybinding {
                     combo: "Shift+Right, Shift+Left",
