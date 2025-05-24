@@ -1,3 +1,5 @@
+cargo-features = ["edition2024"]
+
 [package]
 name = "harboor-sweep-tui"
 version = "1.0.0"
