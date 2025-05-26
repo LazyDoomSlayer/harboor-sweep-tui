@@ -1,0 +1,27 @@
+name: harboor-sweep
+base: core22
+version: "1.0.0"
+summary: Port monitoring and sweeping TUI app
+description: |
+  Harboor Sweep is a Rust-based terminal application for monitoring open ports and listening processes.
+
+grade: stable
+confinement: strict
+
+architectures:
+  - build-on: amd64
+  - build-on: arm64
+  - build-on: armhf
+
+apps:
+  harboor-sweep:
+    command: bin/harboor-sweep
+    plugs: [ network-observe, network-bind ]
+
+parts:
+  harboor-sweep:
+    plugin: rust
+    source: .
+    build-packages:
+      - pkg-config
+      - libssl-dev
