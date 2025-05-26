@@ -1,6 +1,7 @@
 # Harbor Sweep TUI
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![harboor-sweep](https://snapcraft.io/harboor-sweep/badge.svg)](https://snapcraft.io/harboor-sweep)
 
 Cross-platform TUI (terminal user interface) tool to identify and manage active ports and their processes.
 
