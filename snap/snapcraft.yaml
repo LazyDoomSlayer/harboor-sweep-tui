@@ -18,6 +18,10 @@ apps:
     command: bin/harboor-sweep
     plugs: [ network-observe, network-bind ]
 
+  hs:
+    command: bin/harboor-sweep
+    plugs: [ network-observe, network-bind ]
+
 parts:
   harboor-sweep:
     plugin: rust
