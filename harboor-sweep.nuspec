@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>harboor-sweep</id>
+    <version>1.0.0</version>
+    <title>Harboor Sweep</title>
+    <owners>LazyDoomSlayer</owners>
+    <authors>LazyDoomSlayer</authors>
+    <projectUrl>https://github.com/LazyDoomSlayer/harboor-sweep-tui</projectUrl>
+    <packageSourceUrl>https://github.com/LazyDoomSlayer/harboor-sweep-tui/tree/main/tools</packageSourceUrl>
+    <projectSourceUrl>https://github.com/LazyDoomSlayer/harboor-sweep-tui</projectSourceUrl>
+    <iconUrl>https://cdn.jsdelivr.net/gh/LazyDoomSlayer/harboor-sweep-tui@main/assets/harbor-sweep_logo.png</iconUrl>
+    <copyright>© 2025 LazyDoomSlayer</copyright>
+    <licenseUrl>https://github.com/LazyDoomSlayer/harboor-sweep-tui/blob/main/LICENSE</licenseUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <docsUrl>https://github.com/LazyDoomSlayer/harboor-sweep-tui#readme</docsUrl>
+    <bugTrackerUrl>https://github.com/LazyDoomSlayer/harboor-sweep-tui/issues</bugTrackerUrl>
+    <tags>cli cross-platform harboor-sweep terminal tui opensource windows linux macos security audit</tags>
+    <summary>Cross-platform terminal UI for inspecting and managing active network ports and processes</summary>
+    <description>Harboor-Sweep-TUI is a terminal UI for Linux, macOS, and Windows that lets you discover, filter and terminate processes holding ports. Install with `choco install harboor-sweep-tui`.</description>
+    <releaseNotes>Initial 1.0.0 release: Harbor registry sweep TUI</releaseNotes>
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+  </files>
+</package>
