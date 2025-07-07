@@ -1,0 +1,17 @@
+﻿VERIFICATION
+Verification is intended to assist the Chocolatey moderators and community
+in verifying that this package's contents are trustworthy.
+
+The software is downloaded from the following URL:
+https://github.com/LazyDoomSlayer/harboor-sweep-tui/archive/refs/tags/v1.0.0.zip
+
+To verify this package:
+1. Download the zip manually from the URL above.
+2. Compute the SHA256 checksum of the downloaded file.
+3. Compare it to the checksum listed below.
+
+You can compute the checksum in PowerShell using:
+    Get-FileHash .\v1.0.0.zip -Algorithm SHA256
+
+Expected SHA256 checksum:
+4AE17D45A95F7C7411685A44C890608AA8AC4A91B831647074A3AE60F85BE882
