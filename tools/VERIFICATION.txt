@@ -3,7 +3,7 @@ Verification is intended to assist the Chocolatey moderators and community
 in verifying that this package's contents are trustworthy.
 
 The binary archive included in this package was downloaded from the official project release page:
-https://github.com/LazyDoomSlayer/harboor-sweep-tui/archive/refs/tags/v1.0.0.zip
+https://github.com/LazyDoomSlayer/harboor-sweep-tui/releases/download/v1.0.0/harboor-sweep.zip
 
 You can verify the binary using the following steps:
 
