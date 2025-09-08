@@ -31,7 +31,7 @@ crossterm = "0.28.1"
 ratatui = "0.29.0"
 color-eyre = "0.6.5"
 serde = { version = "1", features = ["derive"] }
-windows = { version = "0.59.0", features = ["Win32_NetworkManagement_IpHelper", "Win32_System_Threading", "Win32_Foundation", "Win32_System_ProcessStatus"] }
+windows = { version = "0.62.0", features = ["Win32_NetworkManagement_IpHelper", "Win32_System_Threading", "Win32_Foundation", "Win32_System_ProcessStatus"] }
 unicode-width = "0.2.0"
 serde_json = "1.0.142"
 serde_yaml = "0.9.34"
