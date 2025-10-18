@@ -5,18 +5,14 @@ name = "harboor-sweep"
 version = "1.0.0"
 description = "Cross-platform tool to identify and manage active ports and their processes. Supports Linux, macOS, and Windows."
 authors = ["LazyDoomSlayer <lazydoomslayer@gmail.com>"]
-keywords = [
-    "tui", "terminal", "network", "ports", "cli",
-]
-categories = [
-    "command-line-utilities",
-    "network-programming",
-]
+keywords = ["tui", "terminal", "network", "ports", "cli"]
+categories = ["command-line-utilities", "network-programming"]
 repository = "https://github.com/LazyDoomSlayer/harboor-sweep-tui"
 homepage = "https://github.com/LazyDoomSlayer/harboor-sweep-tui#readme"
 readme = "README.md"
 license = "MIT"
 edition = "2024"
+default-run = "harboor-sweep"
 
 [[bin]]
 name = "harboor-sweep"
@@ -31,7 +27,12 @@ crossterm = "0.28.1"
 ratatui = "0.29.0"
 color-eyre = "0.6.5"
 serde = { version = "1", features = ["derive"] }
-windows = { version = "0.59.0", features = ["Win32_NetworkManagement_IpHelper", "Win32_System_Threading", "Win32_Foundation", "Win32_System_ProcessStatus"] }
+windows = { version = "0.59.0", features = [
+  "Win32_NetworkManagement_IpHelper",
+  "Win32_System_Threading",
+  "Win32_Foundation",
+  "Win32_System_ProcessStatus",
+] }
 unicode-width = "0.2.0"
 serde_json = "1.0.142"
 serde_yaml = "0.9.34"
@@ -48,8 +49,16 @@ depends = "$auto"
 section = "utility"
 priority = "optional"
 assets = [
-    ["target/release/harboor-sweep-tui", "usr/bin", "755"],
-    ["README.md", "usrs/share/doc/harboor-sweep-tui/README", "644"]
+  [
+    "target/release/harboor-sweep-tui",
+    "usr/bin",
+    "755",
+  ],
+  [
+    "README.md",
+    "usrs/share/doc/harboor-sweep-tui/README",
+    "644",
+  ],
 ]
 
 
@@ -62,6 +71,14 @@ depends = "$auto"
 section = "utility"
 priority = "optional"
 assets = [
-    ["target/release/harboor-sweep-tui", "usr/bin", "755"],
-    ["README.md", "usrs/share/doc/harboor-sweep-tui/README", "644"]
+  [
+    "target/release/harboor-sweep-tui",
+    "usr/bin",
+    "755",
+  ],
+  [
+    "README.md",
+    "usrs/share/doc/harboor-sweep-tui/README",
+    "644",
+  ],
 ]
