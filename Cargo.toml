@@ -24,7 +24,7 @@ path = "src/main.rs"
 
 [dependencies]
 crossterm = "0.28.1"
-ratatui = "0.29.0"
+ratatui = "0.30.0"
 color-eyre = "0.6.5"
 serde = { version = "1", features = ["derive"] }
 windows = { version = "0.59.0", features = [
